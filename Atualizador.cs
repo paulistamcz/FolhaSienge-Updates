@@ -106,9 +106,8 @@ public static class Atualizador
             "@echo off\r\n" +
             "timeout /t 2 /nobreak >nul\r\n" +
             $"xcopy \"{extraido}\\*\" \"{dirApp}\" /e /y /q >nul\r\n" +
-            $"rd /s /q \"{extraido}\"\r\n" +
-            $"del /q \"{zip}\"\r\n" +
             $"start \"\" \"{Path.Combine(dirApp, exe)}\"\r\n" +
+            $"rd /s /q \"{dirUpd}\"\r\n" +
             "del \"%~f0\"\r\n";
         File.WriteAllText(bat, conteudo, System.Text.Encoding.GetEncoding(437));
 
