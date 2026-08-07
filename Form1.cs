@@ -15,6 +15,7 @@ public partial class Form1 : Form
         InitializeComponent();
         this.Shown += Form1_Shown;
         CarregarVerbas();
+        Text = $"Importação Folha de Pagamento - Sienge (ENGEMAT)  v{Atualizador.VersaoAtual}";
     }
 
     private void CarregarVerbas()
