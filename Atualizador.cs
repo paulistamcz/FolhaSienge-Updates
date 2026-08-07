@@ -78,6 +78,7 @@ public static class Atualizador
     /// <summary>
     /// Baixa o pacote, extrai e dispara um script que aguarda o app fechar,
     /// substitui os arquivos e reabre na nova versão. Retorna true ao iniciar.
+    /// Lança exceção com a descrição do problema em caso de falha.
     /// </summary>
     public static async Task<bool> BaixarEInstalarAsync(VersaoRelease release)
     {
@@ -101,21 +102,35 @@ public static class Atualizador
 
         string exe = Path.GetFileName(Environment.ProcessPath)
                      ?? "FolhaSienge.exe";
+        string nomeExe = Path.GetFileNameWithoutExtension(exe);
         string bat = Path.Combine(dirApp, "atualizar.bat");
+        // espera o processo do app terminar de fechar antes de sobrescrever
         string conteudo =
             "@echo off\r\n" +
-            "timeout /t 2 /nobreak >nul\r\n" +
+            ":espera\r\n" +
+            $"tasklist /fi \"imagename eq {exe}\" 2>nul | find /i \"{nomeExe}\" >nul\r\n" +
+            "if %errorlevel%==0 (\r\n" +
+            "  ping -n 2 127.0.0.1 >nul\r\n" +
+            "  goto espera\r\n" +
+            ")\r\n" +
             $"xcopy \"{extraido}\\*\" \"{dirApp}\" /e /y /q >nul\r\n" +
             $"start \"\" \"{Path.Combine(dirApp, exe)}\"\r\n" +
             $"rd /s /q \"{dirUpd}\"\r\n" +
             "del \"%~f0\"\r\n";
-        File.WriteAllText(bat, conteudo, System.Text.Encoding.GetEncoding(437));
+        File.WriteAllText(bat, conteudo, new System.Text.UTF8Encoding(false));
 
-        Process.Start(new ProcessStartInfo(bat)
+        try
         {
-            UseShellExecute = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
-        });
+            Process.Start(new ProcessStartInfo(bat)
+            {
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            });
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("Não foi possível iniciar o instalador: " + ex.Message, ex);
+        }
         return true;
     }
 }

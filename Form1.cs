@@ -57,7 +57,17 @@ public partial class Form1 : Form
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine("Falha ao verificar atualização: " + ex.Message);
+            try
+            {
+                var log = Path.Combine(Path.GetTempPath(), "FolhaSienge_update", "erro_update.txt");
+                System.IO.File.WriteAllText(log,
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\r\n" +
+                    ex.ToString());
+            }
+            catch { }
+            MessageBox.Show(this,
+                "Não foi possível instalar a atualização:\n\n" + ex.Message,
+                "Falha na atualização", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 

@@ -17,7 +17,7 @@ if ([string]::IsNullOrWhiteSpace($Versao)) { throw "Não consegui detectar a ver
 Write-Host "==> Versão: $Versao"
 
 Write-Host "==> Publicando build..."
-dotnet publish -c Release -r win-x64 --self-contained false -o "$proj\publicado" 2>&1 | Out-Null
+dotnet publish "$proj\FolhaSienge.csproj" -c Release -r win-x64 --self-contained false -o "$proj\publicado" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Falha no publish." }
 
 Write-Host "==> Compactando pacote..."
