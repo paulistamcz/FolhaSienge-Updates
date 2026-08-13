@@ -266,8 +266,7 @@ public partial class Form1 : Form
                 btnCarregarCentros.Enabled = true;
                 btnRelatorioMensal.Enabled = true;
                 lblStatusBanco.Text += " Competência carregada.";
-            }
-            else
+            }            else
             {
                 btnCarregarCentros.Enabled = false;
                 btnRelatorioMensal.Enabled = false;
@@ -312,6 +311,32 @@ public partial class Form1 : Form
 
         // Data do lote: primeiro dia do mês
         mtbGrfLote.Text = ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+
+        // Preenche o seletor de centro da aba Folha
+        PreencherCentrosFolha();
+    }
+
+    /// <summary>Preenche o combo de centro de custo da aba Folha com os centros da competência.</summary>
+    private void PreencherCentrosFolha()
+    {
+        string comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
+        cmbFolhaCentro.Items.Clear();
+        cmbFolhaCentro.Items.Add(new ComboCentro(0, "Todos os centros"));
+        try
+        {
+            if (_conn != null && !string.IsNullOrWhiteSpace(comp))
+            {
+                foreach (var c in new DbService().ListarCentrosCusto(_conn, comp))
+                    cmbFolhaCentro.Items.Add(new ComboCentro(c.Codigo, c.Nome));
+            }
+        }
+        catch { }
+        cmbFolhaCentro.SelectedIndex = 0;
+    }
+
+    private void cmbFolhaCentro_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        // Ao mudar o centro na aba Folha, não faz nada automático; só informa o filtro.
     }
 
     private void cmbVerba_SelectedIndexChanged(object sender, EventArgs e)
@@ -343,14 +368,12 @@ public partial class Form1 : Form
 
     private void AtualizarDocumento()
     {
-        // O documento (K) agora é definido pela verba selecionada.
-        // A competência preenche apenas se o documento estiver vazio.
-        if (string.IsNullOrWhiteSpace(txtDoc.Text))
-        {
-            var comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
-            if (!string.IsNullOrEmpty(comp))
-                txtDoc.Text = comp.Replace("/", "");
-        }
+        // O documento (K) segue a competência selecionada (ex.: 06/2026 -> "062026").
+        // O Sienge usa a competência quando a coluna K está vazia, mas preenchemos
+        // explicitamente para garantir consistência. O usuário pode editar manualmente depois.
+        var comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
+        if (!string.IsNullOrEmpty(comp))
+            txtDoc.Text = comp.Replace("/", "");
     }
 
     private void btnCarregarCentros_Click(object sender, EventArgs e)
@@ -695,18 +718,21 @@ public partial class Form1 : Form
             ? comp.Replace("/", "")
             : txtDoc.Text.Trim();
         string obs = txtObs.Text.Trim();
-        string verba = tipo switch
+        // Código da verba (coluna A): numérico, conforme a tabela_financeira.
+        // Folha Mensal/Quinzena = verba 1 (SALARIO/FOLHA), Férias = 3, Rescisão = 4.
+        int codigoVerba = tipo switch
         {
-            0 => "FOLHA",
-            1 => "QUINZENA",
-            2 => "FERIAS",
-            _ => "RESCISAO",
+            0 => 1,
+            1 => 1,
+            2 => 3,
+            _ => 4,
         };
         int tipoProcess = tipo == 1 ? 41 : 11;
-        // Código e nome do credor para o CSV (obrigatórios C e D). Usa a verba cadastrada correspondente.
-        var vVerba = VerbaFinanceira.PorCodigo(verba is "FOLHA" or "QUINZENA" ? 1 : verba == "FERIAS" ? 3 : 4);
+        // Credor (C = código, D = nome) conforme a verba da tabela_financeira.
+        var vVerba = VerbaFinanceira.PorCodigo(codigoVerba);
         string credorCod = string.IsNullOrWhiteSpace(vVerba.CredorCodigo) ? "1" : vVerba.CredorCodigo;
         string credorNome = vVerba.Credor;
+        string verba = codigoVerba.ToString();
 
         // Férias e Rescisões usam período de pagamento/vencimento (mtbGrfIni/mtbGrfFim)
         DateTime ini, fim;
@@ -731,7 +757,10 @@ public partial class Form1 : Form
         try
         {
             var svc = new DbService();
+            // Filtro por centro: usa o seletor da aba Folha (preferencial) ou a seleção da seção 2.
             var centrosFiltro = CentrosSelecionadosNaSecao2();
+            if (cmbFolhaCentro.SelectedItem is ComboCentro cc && cc.Codigo > 0)
+                centrosFiltro = new HashSet<int> { cc.Codigo };
 
             if (tipo == 2 || tipo == 3)
             {
@@ -779,7 +808,7 @@ public partial class Form1 : Form
                         return;
                     }
                     var linhasCompletas = centros
-                        .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, "", ""))
+                        .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, credorCod, credorNome))
                         .ToList();
                     _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, obs);
                     decimal total = centros.Sum(x => x.Total);
@@ -836,7 +865,7 @@ public partial class Form1 : Form
                     if (centrosFiltro.Count > 0 && !centrosFiltro.Contains(c.Codigo)) continue;
                     var (n, tot) = svc.TotalPorCentro(_conn, comp, c.Codigo, tipoProcess);
                     if (tot > 0)
-                        linhasCompletas.Add((c.Codigo, c.Nome, n, tot, "", ""));
+                        linhasCompletas.Add((c.Codigo, c.Nome, n, tot, credorCod, credorNome));
                 }
                 if (linhasCompletas.Count == 0)
                 {
@@ -1005,4 +1034,13 @@ public partial class Form1 : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
+}
+
+/// <summary>Item do combo de centro de custo (código + nome).</summary>
+public class ComboCentro
+{
+    public int Codigo { get; }
+    public string Nome { get; }
+    public ComboCentro(int codigo, string nome) { Codigo = codigo; Nome = nome; }
+    public override string ToString() => Codigo == 0 ? Nome : $"{Codigo:D4} - {Nome}";
 }

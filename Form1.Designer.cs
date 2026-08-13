@@ -71,6 +71,8 @@ partial class Form1
     private ComboBox cmbFolhaTipo;
     private Label lblFolhaModo;
     private ComboBox cmbFolhaModo;
+    private Label lblFolhaCentro;
+    private ComboBox cmbFolhaCentro;
     private Button btnGerarFolha;
     private Button btnSalvarFolha;
     private Label lblTotalFolha;
@@ -146,6 +148,8 @@ partial class Form1
         this.cmbFolhaTipo = new ComboBox();
         this.lblFolhaModo = new Label();
         this.cmbFolhaModo = new ComboBox();
+        this.lblFolhaCentro = new Label();
+        this.cmbFolhaCentro = new ComboBox();
         this.btnGerarFolha = new Button();
         this.btnSalvarFolha = new Button();
         this.lblTotalFolha = new Label();
@@ -542,6 +546,8 @@ partial class Form1
         this.grpFolha.Controls.Add(this.cmbFolhaTipo);
         this.grpFolha.Controls.Add(this.lblFolhaModo);
         this.grpFolha.Controls.Add(this.cmbFolhaModo);
+        this.grpFolha.Controls.Add(this.lblFolhaCentro);
+        this.grpFolha.Controls.Add(this.cmbFolhaCentro);
         this.grpFolha.Controls.Add(this.btnGerarFolha);
         this.grpFolha.Controls.Add(this.btnSalvarFolha);
         this.grpFolha.Controls.Add(this.lblTotalFolha);
@@ -589,12 +595,30 @@ partial class Form1
         this.cmbFolhaModo.Size = new System.Drawing.Size(160, 23);
         this.cmbFolhaModo.TabIndex = 3;
         // 
+        // lblFolhaCentro
+        // 
+        this.lblFolhaCentro.AutoSize = true;
+        this.lblFolhaCentro.Location = new System.Drawing.Point(470, 26);
+        this.lblFolhaCentro.Name = "lblFolhaCentro";
+        this.lblFolhaCentro.Size = new System.Drawing.Size(46, 15);
+        this.lblFolhaCentro.TabIndex = 30;
+        this.lblFolhaCentro.Text = "Centro:";
+        // 
+        // cmbFolhaCentro
+        // 
+        this.cmbFolhaCentro.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbFolhaCentro.Location = new System.Drawing.Point(518, 22);
+        this.cmbFolhaCentro.Name = "cmbFolhaCentro";
+        this.cmbFolhaCentro.Size = new System.Drawing.Size(150, 23);
+        this.cmbFolhaCentro.TabIndex = 31;
+        this.cmbFolhaCentro.SelectedIndexChanged += new EventHandler(this.cmbFolhaCentro_SelectedIndexChanged);
+        // 
         // btnGerarFolha
         // 
         this.btnGerarFolha.Enabled = false;
-        this.btnGerarFolha.Location = new System.Drawing.Point(470, 20);
+        this.btnGerarFolha.Location = new System.Drawing.Point(680, 20);
         this.btnGerarFolha.Name = "btnGerarFolha";
-        this.btnGerarFolha.Size = new System.Drawing.Size(160, 28);
+        this.btnGerarFolha.Size = new System.Drawing.Size(140, 28);
         this.btnGerarFolha.TabIndex = 4;
         this.btnGerarFolha.Text = "Gerar CSV";
         this.btnGerarFolha.UseVisualStyleBackColor = true;
@@ -603,11 +627,11 @@ partial class Form1
         // btnSalvarFolha
         // 
         this.btnSalvarFolha.Enabled = false;
-        this.btnSalvarFolha.Location = new System.Drawing.Point(636, 20);
+        this.btnSalvarFolha.Location = new System.Drawing.Point(824, 20);
         this.btnSalvarFolha.Name = "btnSalvarFolha";
-        this.btnSalvarFolha.Size = new System.Drawing.Size(160, 28);
+        this.btnSalvarFolha.Size = new System.Drawing.Size(120, 28);
         this.btnSalvarFolha.TabIndex = 5;
-        this.btnSalvarFolha.Text = "Salvar arquivo...";
+        this.btnSalvarFolha.Text = "Salvar...";
         this.btnSalvarFolha.UseVisualStyleBackColor = true;
         this.btnSalvarFolha.Click += new EventHandler(this.btnSalvarFolha_Click);
         // 
