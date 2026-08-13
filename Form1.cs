@@ -8,14 +8,34 @@ public partial class Form1 : Form
 {
     private OdbcConnection? _conn;
     private List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)> _linhas = new();
+    private List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)> _linhasGrf = new();
     private string? _csvGerado;
+    private string? _csvGeradoGrf;
+    private string? _csvGeradoFolha;
+    private string? _csvGeradoGuias;
 
     public Form1()
     {
         InitializeComponent();
         this.Shown += Form1_Shown;
         CarregarVerbas();
+        CarregarTiposFolha();
         Text = $"Importação Folha de Pagamento - Sienge (ENGEMAT)  v{Atualizador.VersaoAtual}";
+    }
+
+    private void CarregarTiposFolha()
+    {
+        cmbFolhaTipo.Items.Clear();
+        cmbFolhaTipo.Items.Add("Folha Mensal");
+        cmbFolhaTipo.Items.Add("Folha Quinzena");
+        cmbFolhaTipo.Items.Add("Férias");
+        cmbFolhaTipo.Items.Add("Rescisões");
+        cmbFolhaTipo.SelectedIndex = 0;
+
+        cmbFolhaModo.Items.Clear();
+        cmbFolhaModo.Items.Add("Completo (total por centro)");
+        cmbFolhaModo.Items.Add("Analítico (por pessoa)");
+        cmbFolhaModo.SelectedIndex = 0;
     }
 
     private void CarregarVerbas()
@@ -213,6 +233,9 @@ public partial class Form1 : Form
             lblStatusBanco.Text = $"Conectado ao banco: {banco}";
             lblStatusBanco.ForeColor = System.Drawing.Color.Green;
             cmbCompetencia.Enabled = true;
+            btnCarregarGrf.Enabled = true;
+            btnGerarFolha.Enabled = true;
+            btnGerarGuias.Enabled = true;
             CarregarCompetencias();
             btnGerarCsv.Enabled = false;
             btnSalvarCsv.Enabled = false;
@@ -264,6 +287,31 @@ public partial class Form1 : Form
     private void cmbCompetencia_SelectedIndexChanged(object sender, EventArgs e)
     {
         AtualizarDocumento();
+        AtualizarDatasCompetencia();
+    }
+
+    /// <summary>
+    /// Ajusta os campos de data (vencimento, período GRRF, data do lote) para
+    /// o mês da competência selecionada, para que todas as consultas usem esse período.
+    /// </summary>
+    private void AtualizarDatasCompetencia()
+    {
+        string comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
+        if (!DateTime.TryParseExact(comp, "MM/yyyy", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var mes))
+            return;
+
+        // Vencimento (F): último dia do mês da competência
+        var venc = new DateTime(mes.Year, mes.Month, DateTime.DaysInMonth(mes.Year, mes.Month));
+        mtbVencimento.Text = venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+
+        // Período GRRF: primeiro ao último dia do mês
+        var ini = new DateTime(mes.Year, mes.Month, 1);
+        mtbGrfIni.Text = ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+        mtbGrfFim.Text = venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+
+        // Data do lote: primeiro dia do mês
+        mtbGrfLote.Text = ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
     }
 
     private void cmbVerba_SelectedIndexChanged(object sender, EventArgs e)
@@ -271,8 +319,12 @@ public partial class Form1 : Form
         if (cmbVerba.SelectedItem is VerbaFinanceira v)
         {
             txtCredorNome.Text = v.Credor;
-            txtDoc.Text = v.Documento;
             txtObs.Text = v.Descricao;
+            if (!string.IsNullOrWhiteSpace(v.CredorCodigo))
+                txtCredorCodigo.Text = v.CredorCodigo;
+            // Documento (K): não sobrescreve — o Sienge usa a competência quando vazio,
+            // e o usuário pode editar manualmente.
+            AtualizarDocumento();
         }
     }
 
@@ -332,11 +384,12 @@ public partial class Form1 : Form
         dgvCentros.Columns["CredorCodigo"].Width = 110;
         dgvCentros.Columns["CredorNome"].HeaderText = "Nome credor (D)";
         dgvCentros.Columns["CredorNome"].Width = 220;
-        dgvCentros.Columns["Sel"].ReadOnly = true;
+        dgvCentros.Columns["Sel"].ReadOnly = false;
         dgvCentros.Columns["Centro"].ReadOnly = true;
         dgvCentros.Columns["Nome"].ReadOnly = true;
         dgvCentros.Columns["Emp"].ReadOnly = true;
         dgvCentros.Columns["Total"].ReadOnly = true;
+        dgvCentros.CurrentCell = null;
 
         chkTodos.Enabled = true;
         btnGerarCsv.Enabled = true;
@@ -451,6 +504,18 @@ public partial class Form1 : Form
             var svc = new DbService();
             var itens = svc.RelatorioMensalPorVerba(_conn, comp);
             var centros = svc.ResumoCentrosCusto(_conn, comp);
+
+            // Detalhamento por funcionário quando exatamente 1 centro está selecionado na seção 2
+            List<(int Centro, string NomeEmpregado, int Empregado, decimal Liquido)>? detalhe = null;
+            var selecionados = CentrosSelecionadosNaSecao2();
+            if (selecionados.Count == 1)
+            {
+                int centro = selecionados.First();
+                detalhe = svc.ListarFolhaAnalitica(_conn, comp)
+                    .Where(x => x.Centro == centro)
+                    .ToList();
+            }
+
             using var sfd = new SaveFileDialog
             {
                 Filter = "Arquivo PDF (*.pdf)|*.pdf",
@@ -458,7 +523,7 @@ public partial class Form1 : Form
             };
             if (sfd.ShowDialog() == DialogResult.OK)
             {
-                RelatorioPdf.Gerar(sfd.FileName, comp, itens, centros);
+                RelatorioPdf.Gerar(sfd.FileName, comp, itens, centros, detalhe);
                 MessageBox.Show("Relatório salvo: " + sfd.FileName, "Sucesso",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -478,5 +543,466 @@ public partial class Form1 : Form
     {
         return DateTime.TryParseExact(texto, "dd/MM/yyyy", CultureInfo.InvariantCulture,
             DateTimeStyles.None, out _);
+    }
+
+    /// <summary>
+    /// Retorna os centros de custo marcados na seção 2 (dgvCentros).
+    /// Se nenhum estiver marcado, retorna lista vazia (não filtra).
+    /// </summary>
+    private HashSet<int> CentrosSelecionadosNaSecao2()
+    {
+        var set = new HashSet<int>();
+        if (dgvCentros.DataSource is DataTable dt)
+        {
+            foreach (DataRow r in dt.Rows)
+            {
+                if (r["Sel"] is bool b && b && r["Centro"] is not DBNull)
+                    set.Add(Convert.ToInt32(r["Centro"]));
+            }
+        }
+        return set;
+    }
+
+    /// <summary>Filtra uma lista de linhas (Centro, ...) pelos centros selecionados na seção 2.</summary>
+    private List<T> FiltrarPorCentro<T>(IEnumerable<T> linhas, Func<T, int> getCentro, HashSet<int> centros)
+    {
+        if (centros.Count == 0) return linhas.ToList();
+        return linhas.Where(l => centros.Contains(getCentro(l))).ToList();
+    }
+
+    private void btnCarregarGrf_Click(object sender, EventArgs e)
+    {
+        if (_conn == null)
+        {
+            MessageBox.Show("Conecte ao banco primeiro.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (!DateTime.TryParseExact(mtbGrfIni.Text.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var ini) ||
+            !DateTime.TryParseExact(mtbGrfFim.Text.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var fim))
+        {
+            MessageBox.Show("Período de vencimento inválido (use DD/MM/AAAA).", "Erro",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        Cursor = Cursors.WaitCursor;
+        try
+        {
+            var centros = CentrosSelecionadosNaSecao2();
+            _linhasGrf = FiltrarPorCentro(
+                new DbService().ListarGrf(_conn, ini, fim),
+                x => x.ICcustos, centros);
+            var dt = new DataTable();
+            dt.Columns.Add("Sel", typeof(bool));
+            dt.Columns.Add("Emp", typeof(int));
+            dt.Columns.Add("Nome", typeof(string));
+            dt.Columns.Add("Centro", typeof(int));
+            dt.Columns.Add("Vencimento", typeof(string));
+            dt.Columns.Add("Valor", typeof(decimal));
+            foreach (var l in _linhasGrf)
+                dt.Rows.Add(true, l.IEmpregados, l.Nome, l.ICcustos,
+                    l.Vencimento.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture), l.Valor);
+
+            dgvGrf.DataSource = dt;
+            dgvGrf.Columns["Sel"].Width = 40;
+            dgvGrf.Columns["Emp"].Width = 70;
+            dgvGrf.Columns["Nome"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            dgvGrf.Columns["Centro"].Width = 70;
+            dgvGrf.Columns["Vencimento"].Width = 90;
+            dgvGrf.Columns["Valor"].DefaultCellStyle.Format = "N2";
+            dgvGrf.Columns["Sel"].ReadOnly = true;
+
+            decimal total = _linhasGrf.Sum(x => x.Valor);
+            lblTotalGrf.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
+            btnGerarGrf.Enabled = _linhasGrf.Count > 0;
+            txtResultadoGrf.Clear();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erro ao carregar GRRF: " + ex.Message, "Erro",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    private void btnGerarGrf_Click(object sender, EventArgs e)
+    {
+        if (_linhasGrf.Count == 0) return;
+        if (!DateTime.TryParseExact(mtbGrfLote.Text.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var lote))
+        {
+            MessageBox.Show("Data do lote inválida.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        string centro = txtGrfCentro.Text.Trim();
+        var centrosFiltro = CentrosSelecionadosNaSecao2();
+        var selecionadas = _linhasGrf
+            .Select((l, i) => new { l, i })
+            .Where(x => dgvGrf.Rows[x.i].Cells["Sel"].Value is bool b && b)
+            .Where(x => centrosFiltro.Count == 0 || centrosFiltro.Contains(x.l.ICcustos))
+            .Select(x => x.l)
+            .ToList();
+        if (selecionadas.Count == 0)
+        {
+            MessageBox.Show("Marque pelo menos uma linha de GRRF.", "Aviso",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _csvGeradoGrf = DbService.GerarCsvGrf(selecionadas, centro, lote);
+        txtResultadoGrf.Text = _csvGeradoGrf;
+        btnSalvarGrf.Enabled = true;
+    }
+
+    private void btnSalvarGrf_Click(object sender, EventArgs e)
+    {
+        if (string.IsNullOrEmpty(_csvGeradoGrf)) return;
+        using var sfd = new SaveFileDialog
+        {
+            Filter = "Arquivo CSV (*.csv)|*.csv",
+            FileName = "Lote_GRRF.csv"
+        };
+        if (sfd.ShowDialog() == DialogResult.OK)
+        {
+            System.IO.File.WriteAllText(sfd.FileName, _csvGeradoGrf, System.Text.Encoding.GetEncoding(28591));
+            MessageBox.Show("Arquivo salvo: " + sfd.FileName, "Sucesso",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+    }
+
+    private void btnGerarFolha_Click(object sender, EventArgs e)
+    {
+        if (_conn == null)
+        {
+            MessageBox.Show("Conecte ao banco primeiro.", "Aviso",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        string venc = mtbVencimento.Text.Trim();
+        if (!ValidarData(venc))
+        {
+            MessageBox.Show("Vencimento inválido. Use DD/MM/AAAA.", "Erro",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        int tipo = cmbFolhaTipo.SelectedIndex;
+        bool analitico = cmbFolhaModo.SelectedIndex == 1;
+        string comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
+        string doc = string.IsNullOrWhiteSpace(txtDoc.Text.Trim())
+            ? comp.Replace("/", "")
+            : txtDoc.Text.Trim();
+        string obs = txtObs.Text.Trim();
+        string verba = tipo switch
+        {
+            0 => "FOLHA",
+            1 => "QUINZENA",
+            2 => "FERIAS",
+            _ => "RESCISAO",
+        };
+        int tipoProcess = tipo == 1 ? 41 : 11;
+        // Código e nome do credor para o CSV (obrigatórios C e D). Usa a verba cadastrada correspondente.
+        var vVerba = VerbaFinanceira.PorCodigo(verba is "FOLHA" or "QUINZENA" ? 1 : verba == "FERIAS" ? 3 : 4);
+        string credorCod = string.IsNullOrWhiteSpace(vVerba.CredorCodigo) ? "1" : vVerba.CredorCodigo;
+        string credorNome = vVerba.Credor;
+
+        // Férias e Rescisões usam período de pagamento/vencimento (mtbGrfIni/mtbGrfFim)
+        DateTime ini, fim;
+        if (tipo == 2 || tipo == 3)
+        {
+            if (!DateTime.TryParseExact(mtbGrfIni.Text.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out ini) ||
+                !DateTime.TryParseExact(mtbGrfFim.Text.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out fim))
+            {
+                MessageBox.Show("Período (GRRF) inválido. Use DD/MM/AAAA.", "Erro",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+        }
+        else
+        {
+            ini = fim = DateTime.MinValue;
+        }
+
+        Cursor = Cursors.WaitCursor;
+        try
+        {
+            var svc = new DbService();
+            var centrosFiltro = CentrosSelecionadosNaSecao2();
+
+            if (tipo == 2 || tipo == 3)
+            {
+                if (analitico)
+                {
+                    var linhas = FiltrarPorCentro(
+                        tipo == 2
+                            ? svc.ListarFeriasAnalitica(_conn, ini, fim)
+                            : svc.ListarRescisaoAnalitica(_conn, ini, fim),
+                        x => x.Centro, centrosFiltro);
+                    if (linhas.Count == 0)
+                    {
+                        MessageBox.Show("Nenhum registro no período.", "Aviso",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, obs);
+                    decimal total = linhas.Sum(x => x.Valor);
+                    lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
+
+                    var dt = new DataTable();
+                    dt.Columns.Add("Centro", typeof(string));
+                    dt.Columns.Add("Empregado", typeof(int));
+                    dt.Columns.Add("Nome", typeof(string));
+                    dt.Columns.Add("Valor", typeof(decimal));
+                    foreach (var l in linhas)
+                        dt.Rows.Add(l.Centro.ToString("D4"), l.Empregado, l.NomeEmpregado, l.Valor);
+                    dgvFolha.DataSource = dt;
+                    dgvFolha.Columns["Centro"].Width = 70;
+                    dgvFolha.Columns["Empregado"].Width = 80;
+                    dgvFolha.Columns["Nome"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                    dgvFolha.Columns["Valor"].DefaultCellStyle.Format = "N2";
+                }
+                else
+                {
+                    var centros = FiltrarPorCentro(
+                        tipo == 2
+                            ? svc.ResumoFeriasCentros(_conn, ini, fim)
+                            : svc.ResumoRescisaoCentros(_conn, ini, fim),
+                        x => x.Centro, centrosFiltro);
+                    if (centros.Count == 0)
+                    {
+                        MessageBox.Show("Nenhum registro no período.", "Aviso",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    var linhasCompletas = centros
+                        .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, "", ""))
+                        .ToList();
+                    _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, obs);
+                    decimal total = centros.Sum(x => x.Total);
+                    lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
+
+                    var dt = new DataTable();
+                    dt.Columns.Add("Centro", typeof(string));
+                    dt.Columns.Add("Nome", typeof(string));
+                    dt.Columns.Add("Emp", typeof(int));
+                    dt.Columns.Add("Total", typeof(decimal));
+                    foreach (var l in centros)
+                        dt.Rows.Add(l.Centro.ToString("D4"), l.Nome, l.Empregados, l.Total);
+                    dgvFolha.DataSource = dt;
+                    dgvFolha.Columns["Centro"].Width = 70;
+                    dgvFolha.Columns["Nome"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                    dgvFolha.Columns["Emp"].Width = 50;
+                    dgvFolha.Columns["Total"].DefaultCellStyle.Format = "N2";
+                }
+            }
+            else if (analitico)
+            {
+                var linhas = FiltrarPorCentro(
+                    svc.ListarFolhaAnalitica(_conn, comp, tipoProcess),
+                    x => x.Centro, centrosFiltro);
+                if (linhas.Count == 0)
+                {
+                    MessageBox.Show("Nenhum empregado com líquido nesta competência.", "Aviso",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, obs);
+                decimal total = linhas.Sum(x => x.Liquido);
+                lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
+
+                var dt = new DataTable();
+                dt.Columns.Add("Centro", typeof(string));
+                dt.Columns.Add("Empregado", typeof(int));
+                dt.Columns.Add("Nome", typeof(string));
+                dt.Columns.Add("Liquido", typeof(decimal));
+                foreach (var l in linhas)
+                    dt.Rows.Add(l.Centro.ToString("D4"), l.Empregado, l.NomeEmpregado, l.Liquido);
+                dgvFolha.DataSource = dt;
+                dgvFolha.Columns["Centro"].Width = 70;
+                dgvFolha.Columns["Empregado"].Width = 80;
+                dgvFolha.Columns["Nome"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                dgvFolha.Columns["Liquido"].DefaultCellStyle.Format = "N2";
+            }
+            else
+            {
+                var centros = svc.ListarCentrosCusto(_conn, comp, tipoProcess);
+                var linhasCompletas = new List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)>();
+                foreach (var c in centros)
+                {
+                    if (centrosFiltro.Count > 0 && !centrosFiltro.Contains(c.Codigo)) continue;
+                    var (n, tot) = svc.TotalPorCentro(_conn, comp, c.Codigo, tipoProcess);
+                    if (tot > 0)
+                        linhasCompletas.Add((c.Codigo, c.Nome, n, tot, "", ""));
+                }
+                if (linhasCompletas.Count == 0)
+                {
+                    MessageBox.Show("Nenhum valor nesta competência.", "Aviso",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, obs);
+                decimal total = linhasCompletas.Sum(x => x.Total);
+                lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
+
+                var dt = new DataTable();
+                dt.Columns.Add("Centro", typeof(string));
+                dt.Columns.Add("Nome", typeof(string));
+                dt.Columns.Add("Emp", typeof(int));
+                dt.Columns.Add("Total", typeof(decimal));
+                foreach (var l in linhasCompletas)
+                    dt.Rows.Add(l.Centro.ToString("D4"), l.Nome, l.Empregados, l.Total);
+                dgvFolha.DataSource = dt;
+                dgvFolha.Columns["Centro"].Width = 70;
+                dgvFolha.Columns["Nome"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                dgvFolha.Columns["Emp"].Width = 50;
+                dgvFolha.Columns["Total"].DefaultCellStyle.Format = "N2";
+            }
+
+            txtResultadoFolha.Text = _csvGeradoFolha;
+            btnSalvarFolha.Enabled = true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erro ao gerar: " + ex.Message, "Erro",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    private void btnSalvarFolha_Click(object sender, EventArgs e)
+    {
+        if (string.IsNullOrEmpty(_csvGeradoFolha)) return;
+        string comp = cmbCompetencia.SelectedItem?.ToString()?.Replace("/", "").Replace("-", "") ?? "folha";
+        string tipo = cmbFolhaTipo.SelectedItem?.ToString()?.Replace(" ", "_") ?? "Folha";
+        using var sfd = new SaveFileDialog
+        {
+            Filter = "Arquivo CSV (*.csv)|*.csv",
+            FileName = $"Importacao_{tipo}_{comp}.csv"
+        };
+        if (sfd.ShowDialog() == DialogResult.OK)
+        {
+            System.IO.File.WriteAllText(sfd.FileName, _csvGeradoFolha, System.Text.Encoding.GetEncoding(28591));
+            MessageBox.Show("Arquivo salvo: " + sfd.FileName, "Sucesso",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+    }
+
+    private void btnGerarGuias_Click(object sender, EventArgs e)
+    {
+        if (_conn == null || cmbCompetencia.SelectedItem == null)
+        {
+            MessageBox.Show("Conecte e selecione uma competência.", "Aviso",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        string comp = cmbCompetencia.SelectedItem.ToString()!;
+        string venc = mtbVencimento.Text.Trim();
+        if (!ValidarData(venc))
+        {
+            MessageBox.Show("Vencimento inválido. Use DD/MM/AAAA.", "Erro",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        string doc = string.IsNullOrWhiteSpace(txtDoc.Text.Trim())
+            ? comp.Replace("/", "")
+            : txtDoc.Text.Trim();
+
+        Cursor = Cursors.WaitCursor;
+        try
+        {
+            var svc = new DbService();
+            var linhas = svc.ListarGuiasCompetencia(_conn, comp);
+
+            // INSS e FGTS vêm do ListarGuiasCompetencia; IRRF e eCONSIGNADO por período do vencimento informado
+            if (DateTime.TryParseExact(venc, "dd/MM/yyyy", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var venIni))
+            {
+                var venFim = venIni.AddMonths(1).AddDays(-1);
+                decimal irrf = svc.TotalGuiaIrrf(_conn, venIni.AddMonths(-1), venFim);
+                if (irrf > 0)
+                    linhas.Add(("IRRF", irrf, venIni));
+
+                decimal cons = svc.TotalGuiaFgtsConsignado(_conn, venIni.AddMonths(-1), venFim);
+                if (cons > 0)
+                    linhas.Add(("eCONSIGNADO", cons, venIni));
+            }
+
+            if (linhas.Count == 0)
+            {
+                MessageBox.Show("Nenhuma guia encontrada na competência.", "Aviso",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var sb = new System.Text.StringBuilder();
+            int i = 1;
+            foreach (var l in linhas)
+            {
+                var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
+                var v = l.Vencimento == DateTime.MinValue ? venc : l.Vencimento.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+                // Código do credor (C) e nome (D) conforme a tabela_financeira.
+                string codCredor, nomeCredor;
+                switch (l.Descricao.ToUpperInvariant())
+                {
+                    case "INSS": codCredor = "298"; nomeCredor = "MINISTERIO DA FAZENDA"; break;
+                    case "IRRF": codCredor = ""; nomeCredor = "MINISTERIO DA FAZENDA"; break;
+                    case "FGTS": codCredor = ""; nomeCredor = "CAIXA ECONOMICA FEDERAL"; break;
+                    case "ECONSIGNADO": codCredor = ""; nomeCredor = "CAIXA ECONOMICA FEDERAL"; break;
+                    default: codCredor = "1"; nomeCredor = l.Descricao; break;
+                }
+                if (string.IsNullOrWhiteSpace(codCredor)) codCredor = "1";
+                sb.AppendLine($"{l.Descricao};{i:D4};{codCredor};{nomeCredor};{valor};{v};;;;;{doc};");
+                i++;
+            }
+            _csvGeradoGuias = sb.ToString();
+            txtResultadoGuias.Text = _csvGeradoGuias;
+            lblTotalGuias.Text = $"Total: R$ {linhas.Sum(x => x.Valor).ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
+            btnSalvarGuias.Enabled = true;
+
+            var dt = new DataTable();
+            dt.Columns.Add("Guia", typeof(string));
+            dt.Columns.Add("Valor", typeof(decimal));
+            dt.Columns.Add("Vencimento", typeof(string));
+            foreach (var l in linhas)
+                dt.Rows.Add(l.Descricao, l.Valor,
+                    l.Vencimento == DateTime.MinValue ? venc : l.Vencimento.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture));
+            dgvGuias.DataSource = dt;
+            dgvGuias.Columns["Guia"].Width = 120;
+            dgvGuias.Columns["Valor"].DefaultCellStyle.Format = "N2";
+            dgvGuias.Columns["Vencimento"].Width = 100;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erro ao gerar guias: " + ex.Message, "Erro",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    private void btnSalvarGuias_Click(object sender, EventArgs e)
+    {
+        if (string.IsNullOrEmpty(_csvGeradoGuias)) return;
+        string comp = cmbCompetencia.SelectedItem?.ToString()?.Replace("/", "").Replace("-", "") ?? "guias";
+        using var sfd = new SaveFileDialog
+        {
+            Filter = "Arquivo CSV (*.csv)|*.csv",
+            FileName = $"Guias_{comp}.csv"
+        };
+        if (sfd.ShowDialog() == DialogResult.OK)
+        {
+            System.IO.File.WriteAllText(sfd.FileName, _csvGeradoGuias, System.Text.Encoding.GetEncoding(28591));
+            MessageBox.Show("Arquivo salvo: " + sfd.FileName, "Sucesso",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
     }
 }

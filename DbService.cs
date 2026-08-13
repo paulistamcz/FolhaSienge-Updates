@@ -230,7 +230,7 @@ public class DbService
         return lista;
     }
 
-    public List<(int Codigo, string Nome)> ListarCentrosCusto(OdbcConnection conn, string comp)
+    public List<(int Codigo, string Nome)> ListarCentrosCusto(OdbcConnection conn, string comp, int tipoProcess = 11)
     {
         var sql = CompetenciaParaSql(comp);
         var lista = new List<(int, string)>();
@@ -240,9 +240,10 @@ public class DbService
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 " +
+            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = ? " +
             "ORDER BY e.i_ccustos", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
+        cmd.Parameters.AddWithValue("tipo", tipoProcess);
         using var rd = cmd.ExecuteReader();
         while (rd.Read())
         {
@@ -253,7 +254,7 @@ public class DbService
         return lista;
     }
 
-    public (int Empregados, decimal Total) TotalPorCentro(OdbcConnection conn, string comp, int centro)
+    public (int Empregados, decimal Total) TotalPorCentro(OdbcConnection conn, string comp, int centro, int tipoProcess = 11)
     {
         var sql = CompetenciaParaSql(comp);
         using var cmd = new OdbcCommand(
@@ -261,9 +262,10 @@ public class DbService
             "FROM bethadba.foliquidosfilepr f " +
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 " +
+            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = ? " +
             "AND e.i_ccustos = ?", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
+        cmd.Parameters.AddWithValue("tipo", tipoProcess);
         cmd.Parameters.AddWithValue("centro", centro);
         using var rd = cmd.ExecuteReader();
         if (rd.Read())
@@ -318,6 +320,179 @@ public class DbService
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Folha líquida por empregado (analítico) da competência, tipo_process 11.
+    /// Retorna (Centro, NomeEmpregado, Empregado, Liquido) por pessoa.
+    /// </summary>
+    public List<(int Centro, string NomeEmpregado, int Empregado, decimal Liquido)>
+        ListarFolhaAnalitica(OdbcConnection conn, string comp, int tipoProcess = 11)
+    {
+        var sql = CompetenciaParaSql(comp);
+        var lista = new List<(int, string, int, decimal)>();
+        using var cmd = new OdbcCommand(
+            "SELECT e.i_ccustos, TRIM(e.nome), f.i_empregados, ROUND(f.liquido, 2) " +
+            "FROM bethadba.foliquidosfilepr f " +
+            "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
+            "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
+            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = ? " +
+            "AND ROUND(f.liquido, 2) > 0 " +
+            "ORDER BY e.i_ccustos, e.nome", conn);
+        cmd.Parameters.AddWithValue("competencia", sql);
+        cmd.Parameters.AddWithValue("tipo", tipoProcess);
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read())
+        {
+            int cc = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+            string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+            int emp = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
+            decimal liq = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
+            lista.Add((cc, nome, emp, liq));
+        }
+        return lista;
+    }
+
+    /// <summary>
+    /// Gera CSV analítico (1 linha por empregado) no layout Sienge.
+    /// Layout: verba;centro;credorCodigo;credorNome;valor;vencimento;;;;;doc;obs
+    /// credorCodigo/credorNome da verba são aplicados a todas as linhas (o credor
+    /// do pagamento é a empresa/verba; o nome do empregado vai na observação L).
+    /// </summary>
+    public static string GerarCsvAnalitico(
+        List<(int Centro, string NomeEmpregado, int Empregado, decimal Liquido)> linhas,
+        string vencimento, string verba, string credorCodigo, string credorNome,
+        string competenciaDoc, string observacao = "")
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var l in linhas)
+        {
+            var cc = l.Centro.ToString("D4");
+            var valor = l.Liquido.ToString("0.00", CultureInfo.InvariantCulture);
+            var obs = string.IsNullOrWhiteSpace(observacao) ? l.NomeEmpregado : observacao + " - " + l.NomeEmpregado;
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};;;;;{competenciaDoc};{obs}");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Férias por empregado num período de pagamento (analítico).
+    /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa usando VALOR_REMUNERACAO.
+    /// </summary>
+    public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
+        ListarFeriasAnalitica(OdbcConnection conn, DateTime ini, DateTime fim)
+    {
+        var lista = new List<(int, string, int, decimal)>();
+        using var cmd = new OdbcCommand(
+            "SELECT e.i_ccustos, TRIM(e.nome), f.I_EMPREGADOS, ROUND(f.VALOR_REMUNERACAO, 2) " +
+            "FROM bethadba.FOFERIAS f " +
+            "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
+            "WHERE f.CODI_EMP = 1 AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
+            "AND ROUND(f.VALOR_REMUNERACAO, 2) > 0 " +
+            "ORDER BY e.i_ccustos, e.nome", conn);
+        cmd.Parameters.AddWithValue("ini", ini);
+        cmd.Parameters.AddWithValue("fim", fim);
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read())
+        {
+            int cc = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+            string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+            int emp = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
+            decimal val = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
+            lista.Add((cc, nome, emp, val));
+        }
+        return lista;
+    }
+
+    /// <summary>
+    /// Férias por centro (completo) num período de pagamento.
+    /// Retorna (Centro, Nome, Empregados, Total).
+    /// </summary>
+    public List<(int Centro, string Nome, int Empregados, decimal Total)>
+        ResumoFeriasCentros(OdbcConnection conn, DateTime ini, DateTime fim)
+    {
+        var lista = new List<(int, string, int, decimal)>();
+        using var cmd = new OdbcCommand(
+            "SELECT e.i_ccustos, c.nome, COUNT(*), ROUND(SUM(f.VALOR_REMUNERACAO), 2) " +
+            "FROM bethadba.FOFERIAS f " +
+            "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
+            "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
+            "WHERE f.CODI_EMP = 1 AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
+            "AND ROUND(f.VALOR_REMUNERACAO, 2) > 0 " +
+            "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn);
+        cmd.Parameters.AddWithValue("ini", ini);
+        cmd.Parameters.AddWithValue("fim", fim);
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read())
+        {
+            int cc = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+            string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+            int emp = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
+            decimal tot = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
+            lista.Add((cc, nome, emp, tot));
+        }
+        return lista;
+    }
+
+    /// <summary>
+    /// Rescisões por empregado num período (analítico) - base = foguiagrfc (GRRF).
+    /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa.
+    /// </summary>
+    public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
+        ListarRescisaoAnalitica(OdbcConnection conn, DateTime ini, DateTime fim)
+    {
+        var lista = new List<(int, string, int, decimal)>();
+        using var cmd = new OdbcCommand(
+            "SELECT e.i_ccustos, TRIM(e.nome), g.i_empregados, " +
+            "ROUND(g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts, 2) " +
+            "FROM bethadba.foguiagrfc g " +
+            "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
+            "WHERE g.codi_emp = 1 AND g.vencimento >= ? AND g.vencimento <= ? " +
+            "AND (g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts) > 0 " +
+            "ORDER BY e.i_ccustos, e.nome", conn);
+        cmd.Parameters.AddWithValue("ini", ini);
+        cmd.Parameters.AddWithValue("fim", fim);
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read())
+        {
+            int cc = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+            string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+            int emp = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
+            decimal val = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
+            lista.Add((cc, nome, emp, val));
+        }
+        return lista;
+    }
+
+    /// <summary>
+    /// Rescisões por centro (completo) num período - base = foguiagrfc.
+    /// Retorna (Centro, Nome, Empregados, Total).
+    /// </summary>
+    public List<(int Centro, string Nome, int Empregados, decimal Total)>
+        ResumoRescisaoCentros(OdbcConnection conn, DateTime ini, DateTime fim)
+    {
+        var lista = new List<(int, string, int, decimal)>();
+        using var cmd = new OdbcCommand(
+            "SELECT e.i_ccustos, c.nome, COUNT(*), " +
+            "ROUND(SUM(g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts), 2) " +
+            "FROM bethadba.foguiagrfc g " +
+            "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
+            "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
+            "WHERE g.codi_emp = 1 AND g.vencimento >= ? AND g.vencimento <= ? " +
+            "AND (g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts) > 0 " +
+            "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn);
+        cmd.Parameters.AddWithValue("ini", ini);
+        cmd.Parameters.AddWithValue("fim", fim);
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read())
+        {
+            int cc = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+            string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+            int emp = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
+            decimal tot = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
+            lista.Add((cc, nome, emp, tot));
+        }
+        return lista;
+    }
+
     /// <summary>Total líquido da folha da competência (tipo_process 11), mesma base do CSV.</summary>
     public decimal TotalLiquidoFolha(OdbcConnection conn, string comp)
     {
@@ -333,7 +508,92 @@ public class DbService
         return 0m;
     }
 
-    /// <summary>Soma dos valores de fomovto por classificação do evento (tipo_proces 11).</summary>
+    /// <summary>Valor da guia de INSS (total_guia) da competência, tipo_process 11.</summary>
+    public decimal TotalGuiaInssCompetencia(OdbcConnection conn, string comp)
+    {
+        var sql = CompetenciaParaSql(comp);
+        using var cmd = new OdbcCommand(
+            "SELECT SUM(g.total_guia) FROM bethadba.foguiainss g " +
+            "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11", conn);
+        cmd.Parameters.AddWithValue("competencia", sql);
+        using var rd = cmd.ExecuteReader();
+        if (rd.Read() && !rd.IsDBNull(0))
+            return Convert.ToDecimal(rd[0]);
+        return 0m;
+    }
+
+    /// <summary>Valor da guia de IRRF (focalcirrf.valor) por período/vencimento.</summary>
+    public decimal TotalGuiaIrrf(OdbcConnection conn, DateTime ini, DateTime fim)
+    {
+        using var cmd = new OdbcCommand(
+            "SELECT SUM(g.valor) FROM bethadba.focalcirrf g " +
+            "WHERE g.codi_emp = 1 AND g.vencimento >= ? AND g.vencimento <= ?", conn);
+        cmd.Parameters.AddWithValue("ini", ini);
+        cmd.Parameters.AddWithValue("fim", fim);
+        using var rd = cmd.ExecuteReader();
+        if (rd.Read() && !rd.IsDBNull(0))
+            return Convert.ToDecimal(rd[0]);
+        return 0m;
+    }
+
+    /// <summary>Valor da guia de FGTS (total_fgts) da competência, tipo_process 11.</summary>
+    public decimal TotalGuiaFgts(OdbcConnection conn, string comp)
+    {
+        var sql = CompetenciaParaSql(comp);
+        using var cmd = new OdbcCommand(
+            "SELECT SUM(g.total_fgts) FROM bethadba.fofgtsfilial g " +
+            "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11", conn);
+        cmd.Parameters.AddWithValue("competencia", sql);
+        using var rd = cmd.ExecuteReader();
+        if (rd.Read() && !rd.IsDBNull(0))
+            return Convert.ToDecimal(rd[0]);
+        return 0m;
+    }
+
+    /// <summary>Valor da guia de FGTS consignado (crédito do trabalhador) da competência de rescisão.</summary>
+    public decimal TotalGuiaFgtsConsignado(OdbcConnection conn, DateTime ini, DateTime fim)
+    {
+        using var cmd = new OdbcCommand(
+            "SELECT SUM(e.VALOR_SALDO_DEVEDOR) FROM bethadba.FOEMPRESTIMOS_CRED_TRAB_RESCISAO e " +
+            "WHERE e.CODI_EMP = 1 AND e.COMPETENCIA_RESCISAO >= ? AND e.COMPETENCIA_RESCISAO <= ?", conn);
+        cmd.Parameters.AddWithValue("ini", ini);
+        cmd.Parameters.AddWithValue("fim", fim);
+        using var rd = cmd.ExecuteReader();
+        if (rd.Read() && !rd.IsDBNull(0))
+            return Convert.ToDecimal(rd[0]);
+        return 0m;
+    }
+
+    /// <summary>
+    /// Guias do mês para geração de CSV de guia (1 linha por guia).
+    /// Retorna (Descricao, Valor, Vencimento).
+    /// </summary>
+    public List<(string Descricao, decimal Valor, DateTime Vencimento)>
+        ListarGuiasCompetencia(OdbcConnection conn, string comp)
+    {
+        var lista = new List<(string, decimal, DateTime)>();
+        var sql = CompetenciaParaSql(comp);
+        using var cmd = new OdbcCommand(
+            "SELECT 'INSS', g.total_guia, g.vencimento FROM bethadba.foguiainss g " +
+            "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11 " +
+            "UNION ALL " +
+            "SELECT 'FGTS', g.total_fgts, g.vencimento FROM bethadba.fofgtsfilial g " +
+            "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11", conn);
+        cmd.Parameters.AddWithValue("c1", sql);
+        cmd.Parameters.AddWithValue("c2", sql);
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read())
+        {
+            string desc = Convert.ToString(rd[0]) ?? "";
+            decimal val = rd.IsDBNull(1) ? 0m : Convert.ToDecimal(rd[1]);
+            DateTime ven = rd.IsDBNull(2) ? DateTime.MinValue : Convert.ToDateTime(rd[2]);
+            if (val > 0)
+                lista.Add((desc, val, ven));
+        }
+        return lista;
+    }
+
+
     public Dictionary<int, decimal> TotaisPorClasse(OdbcConnection conn, string comp)
     {
         var sql = CompetenciaParaSql(comp);
@@ -373,6 +633,58 @@ public class DbService
         if (rd.Read() && !rd.IsDBNull(0))
             return Convert.ToDecimal(rd[0]);
         return 0m;
+    }
+
+    /// <summary>
+    /// Lista as guias GRRF de rescisão (bethadba.foguiagrfc) num período de vencimento.
+    /// Valor por empregado = mes_ant_valor + resc_valor + aviso_previo_valor + multa_fgts.
+    /// </summary>
+    public List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)>
+        ListarGrf(OdbcConnection conn, DateTime ini, DateTime fim)
+    {
+        var lista = new List<(int, string, int, DateTime, decimal)>();
+        using var cmd = new OdbcCommand(
+            "SELECT e.i_empregados, TRIM(e.nome), e.i_ccustos, g.vencimento, " +
+            "ROUND(g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts, 2) AS valor " +
+            "FROM bethadba.foguiagrfc g " +
+            "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
+            "WHERE g.codi_emp = 1 AND g.vencimento >= ? AND g.vencimento <= ? " +
+            "AND (g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts) > 0 " +
+            "ORDER BY g.vencimento, e.nome", conn);
+        cmd.Parameters.AddWithValue("ini", ini);
+        cmd.Parameters.AddWithValue("fim", fim);
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read())
+        {
+            int emp = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+            string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+            int cc = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
+            DateTime ven = rd.IsDBNull(3) ? DateTime.MinValue : Convert.ToDateTime(rd[3]);
+            decimal val = rd.IsDBNull(4) ? 0m : Convert.ToDecimal(rd[4]);
+            lista.Add((emp, nome, cc, ven, val));
+        }
+        return lista;
+    }
+
+    /// <summary>
+    /// Gera o CSV do lote GRRF no formato da planilha manual.
+    /// Layout: 59;centro;37;GRRF;valor;vencimento;;;;;GRRF-dd-MM-yyyy-n;NOME
+    /// </summary>
+    public static string GerarCsvGrf(
+        List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)> linhas,
+        string centro, DateTime dataLote, string verba = "59")
+    {
+        var sb = new System.Text.StringBuilder();
+        string lote = dataLote.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture);
+        int n = 1;
+        foreach (var l in linhas)
+        {
+            var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
+            var venc = l.Vencimento.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            sb.AppendLine($"{verba};{centro};37;GRRF;{valor};{venc};;;;;GRRF-{lote}-{n};{l.Nome}");
+            n++;
+        }
+        return sb.ToString();
     }
 
     /// <summary>

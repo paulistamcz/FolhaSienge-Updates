@@ -20,13 +20,16 @@ public static class RelatorioPdf
     private static readonly string[] Headers = { "Código", "Descrição da Verba", "Plano Fin.", "Credor", "Doc.", "Forma de Pagamento", "Valor (R$)" };
     private static readonly float[] ColsCentro = { 60, 400, 110, 212 };
     private static readonly string[] HeadersCentro = { "Centro", "Centro de Custo", "Empregados", "Total (R$)" };
+    private static readonly float[] ColsDetalhe = { 50, 70, 500, 162 };
+    private static readonly string[] HeadersDetalhe = { "Centro", "Matrícula", "Funcionário", "Líquido (R$)" };
     private const float X0 = 30;
     private const float AlturaMinima = 22;
     private const float Espaco = 3;
 
     public static void Gerar(string caminho, string competencia,
         List<(VerbaFinanceira Verba, decimal Valor)> itens,
-        List<(int Codigo, string Nome, int Empregados, decimal Total)> centros)
+        List<(int Codigo, string Nome, int Empregados, decimal Total)> centros,
+        List<(int Centro, string NomeEmpregado, int Empregado, decimal Liquido)>? detalhe = null)
     {
         using var doc = new PdfDocument();
         PdfPage page = NovaPagina(doc);
@@ -89,6 +92,29 @@ public static class RelatorioPdf
             r++;
         }
         DrawTotal(gfx, total, y, fonteBold);
+
+        // ===== 3. DETALHAMENTO POR FUNCIONÁRIO (quando 1 centro selecionado) =====
+        if (detalhe != null && detalhe.Count > 0)
+        {
+            y += AlturaMinima + 16;
+            (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, AlturaMinima);
+            gfx.DrawString("3. DETALHAMENTO POR FUNCIONÁRIO", fonteCab, XBrushes.Black, new XPoint(X0, y));
+            y += 16;
+            DrawDetalheHeader(gfx, y, fonteCab);
+            y += AlturaMinima;
+
+            decimal totalDetalhe = 0m;
+            for (int i = 0; i < detalhe.Count; i++)
+            {
+                var d = detalhe[i];
+                (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, AlturaMinima);
+                if (y == 30) { DrawDetalheHeader(gfx, y, fonteCab); y += AlturaMinima; }
+                DrawDetalheRow(gfx, d, y, i % 2 == 0, fonte);
+                totalDetalhe += d.Liquido;
+                y += AlturaMinima;
+            }
+            DrawDetalheTotal(gfx, detalhe.Count, totalDetalhe, y, fonteBold);
+        }
 
         gfx.Dispose();
         doc.Save(caminho);
@@ -278,5 +304,65 @@ public static class RelatorioPdf
             new XRect(X0, y + 2, larguraTotal - Cols[Cols.Length - 1], AlturaMinima - 4), XStringFormats.Center);
         gfx.DrawString(VerbaFinanceira.FormatarValor(total), fonteBold, XBrushes.White,
             new XRect(X0 + larguraTotal - Cols[Cols.Length - 1], y + 2, Cols[Cols.Length - 1] - 6, AlturaMinima - 4), XStringFormats.CenterRight);
+    }
+
+    private static void DrawDetalheHeader(XGraphics gfx, float y, XFont fonteCab)
+    {
+        float x = X0;
+        for (int i = 0; i < HeadersDetalhe.Length; i++)
+        {
+            gfx.DrawRectangle(XBrushes.SteelBlue, x, y, ColsDetalhe[i], AlturaMinima);
+            gfx.DrawString(HeadersDetalhe[i], fonteCab, XBrushes.White,
+                new XRect(x, y, ColsDetalhe[i], AlturaMinima), XStringFormats.Center);
+            x += ColsDetalhe[i];
+        }
+    }
+
+    private static void DrawDetalheRow(XGraphics gfx,
+        (int Centro, string NomeEmpregado, int Empregado, decimal Liquido) d,
+        float y, bool zebra, XFont fonte)
+    {
+        string[] cells =
+        {
+            d.Centro.ToString("D4"),
+            d.Empregado.ToString(),
+            d.NomeEmpregado,
+            VerbaFinanceira.FormatarValor(d.Liquido),
+        };
+        float x = X0;
+        for (int i = 0; i < ColsDetalhe.Length; i++)
+        {
+            gfx.DrawRectangle(XBrushes.Silver, x, y, ColsDetalhe[i], AlturaMinima);
+            gfx.DrawRectangle(zebra ? XBrushes.LightGray : XBrushes.White,
+                x + 0.5, y + 0.5, ColsDetalhe[i] - 1, AlturaMinima - 1);
+            var rect = new XRect(x + Espaco, y + Espaco, ColsDetalhe[i] - (Espaco * 2), AlturaMinima - (Espaco * 2));
+            if (i == 3)
+            {
+                gfx.DrawString(cells[i], fonte, XBrushes.Black, rect, XStringFormats.CenterRight);
+            }
+            else
+            {
+                var formatter = new XTextFormatter(gfx)
+                {
+                    Alignment = i <= 1 ? XParagraphAlignment.Center : XParagraphAlignment.Left
+                };
+                formatter.DrawString(cells[i], fonte, XBrushes.Black, rect);
+            }
+            x += ColsDetalhe[i];
+        }
+    }
+
+    private static void DrawDetalheTotal(XGraphics gfx, int emp, decimal total, float y, XFont fonteBold)
+    {
+        float x = X0;
+        for (int i = 0; i < ColsDetalhe.Length; i++)
+        {
+            gfx.DrawRectangle(XBrushes.SteelBlue, x, y, ColsDetalhe[i], AlturaMinima);
+            x += ColsDetalhe[i];
+        }
+        gfx.DrawString($"TOTAL ({emp} funcionários)", fonteBold, XBrushes.White,
+            new XRect(X0, y + 2, ColsDetalhe[0] + ColsDetalhe[1] + ColsDetalhe[2], AlturaMinima - 4), XStringFormats.Center);
+        gfx.DrawString(VerbaFinanceira.FormatarValor(total), fonteBold, XBrushes.White,
+            new XRect(X0 + ColsDetalhe[0] + ColsDetalhe[1] + ColsDetalhe[2], y + 2, ColsDetalhe[3] - 6, AlturaMinima - 4), XStringFormats.CenterRight);
     }
 }

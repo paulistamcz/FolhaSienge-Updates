@@ -50,6 +50,46 @@ partial class Form1
     private Label lblTotal;
     private TextBox txtResultado;
 
+    private GroupBox grpGrf;
+    private Label lblGrfPeriodo;
+    private MaskedTextBox mtbGrfIni;
+    private Label lblGrfAte;
+    private MaskedTextBox mtbGrfFim;
+    private Label lblGrfLote;
+    private MaskedTextBox mtbGrfLote;
+    private Label lblGrfCentro;
+    private TextBox txtGrfCentro;
+    private Button btnCarregarGrf;
+    private Button btnGerarGrf;
+    private Button btnSalvarGrf;
+    private Label lblTotalGrf;
+    private DataGridView dgvGrf;
+    private TextBox txtResultadoGrf;
+
+    private GroupBox grpFolha;
+    private Label lblFolhaTipo;
+    private ComboBox cmbFolhaTipo;
+    private Label lblFolhaModo;
+    private ComboBox cmbFolhaModo;
+    private Button btnGerarFolha;
+    private Button btnSalvarFolha;
+    private Label lblTotalFolha;
+    private DataGridView dgvFolha;
+    private TextBox txtResultadoFolha;
+
+    private GroupBox grpGuias;
+    private Label lblGuiasComp;
+    private Button btnGerarGuias;
+    private Button btnSalvarGuias;
+    private Label lblTotalGuias;
+    private DataGridView dgvGuias;
+    private TextBox txtResultadoGuias;
+
+    private TabControl tabExport;
+    private TabPage tabGrf;
+    private TabPage tabFolha;
+    private TabPage tabGuias;
+
     private void InitializeComponent()
     {
         this.grpBanco = new GroupBox();
@@ -86,6 +126,42 @@ partial class Form1
         this.btnSalvarCsv = new Button();
         this.lblTotal = new Label();
         this.txtResultado = new TextBox();
+        this.grpGrf = new GroupBox();
+        this.lblGrfPeriodo = new Label();
+        this.mtbGrfIni = new MaskedTextBox();
+        this.lblGrfAte = new Label();
+        this.mtbGrfFim = new MaskedTextBox();
+        this.lblGrfLote = new Label();
+        this.mtbGrfLote = new MaskedTextBox();
+        this.lblGrfCentro = new Label();
+        this.txtGrfCentro = new TextBox();
+        this.btnCarregarGrf = new Button();
+        this.btnGerarGrf = new Button();
+        this.btnSalvarGrf = new Button();
+        this.lblTotalGrf = new Label();
+        this.dgvGrf = new DataGridView();
+        this.txtResultadoGrf = new TextBox();
+        this.grpFolha = new GroupBox();
+        this.lblFolhaTipo = new Label();
+        this.cmbFolhaTipo = new ComboBox();
+        this.lblFolhaModo = new Label();
+        this.cmbFolhaModo = new ComboBox();
+        this.btnGerarFolha = new Button();
+        this.btnSalvarFolha = new Button();
+        this.lblTotalFolha = new Label();
+        this.dgvFolha = new DataGridView();
+        this.txtResultadoFolha = new TextBox();
+        this.grpGuias = new GroupBox();
+        this.lblGuiasComp = new Label();
+        this.btnGerarGuias = new Button();
+        this.btnSalvarGuias = new Button();
+        this.lblTotalGuias = new Label();
+        this.dgvGuias = new DataGridView();
+        this.txtResultadoGuias = new TextBox();
+        this.tabExport = new TabControl();
+        this.tabGrf = new TabPage();
+        this.tabFolha = new TabPage();
+        this.tabGuias = new TabPage();
         this.grpBanco.SuspendLayout();
         this.grpDados.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)(this.dgvCentros)).BeginInit();
@@ -301,7 +377,7 @@ partial class Form1
         this.grpCsv.Controls.Add(this.btnSalvarCsv);
         this.grpCsv.Controls.Add(this.lblTotal);
         this.grpCsv.Controls.Add(this.txtResultado);
-        this.grpCsv.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.grpCsv.Anchor = ((AnchorStyles)(((AnchorStyles.Top | AnchorStyles.Left) | AnchorStyles.Right)));
         this.grpCsv.Location = new System.Drawing.Point(12, 432);
         this.grpCsv.Name = "grpCsv";
         this.grpCsv.Size = new System.Drawing.Size(960, 270);
@@ -459,17 +535,415 @@ partial class Form1
         this.txtResultado.TabIndex = 9;
         this.txtResultado.Font = new System.Drawing.Font("Consolas", 9F);
         // 
+        // grpFolha
+        // 
+        this.grpFolha.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.grpFolha.Controls.Add(this.lblFolhaTipo);
+        this.grpFolha.Controls.Add(this.cmbFolhaTipo);
+        this.grpFolha.Controls.Add(this.lblFolhaModo);
+        this.grpFolha.Controls.Add(this.cmbFolhaModo);
+        this.grpFolha.Controls.Add(this.btnGerarFolha);
+        this.grpFolha.Controls.Add(this.btnSalvarFolha);
+        this.grpFolha.Controls.Add(this.lblTotalFolha);
+        this.grpFolha.Controls.Add(this.dgvFolha);
+        this.grpFolha.Controls.Add(this.txtResultadoFolha);
+        this.grpFolha.Dock = System.Windows.Forms.DockStyle.Fill;
+        this.grpFolha.Location = new System.Drawing.Point(3, 3);
+        this.grpFolha.Name = "grpFolha";
+        this.grpFolha.Size = new System.Drawing.Size(954, 302);
+        this.grpFolha.TabIndex = 4;
+        this.grpFolha.TabStop = false;
+        this.grpFolha.Text = "Folha / Férias / Rescisões (por pessoa ou por centro)";
+        // 
+        // lblFolhaTipo
+        // 
+        this.lblFolhaTipo.AutoSize = true;
+        this.lblFolhaTipo.Location = new System.Drawing.Point(16, 26);
+        this.lblFolhaTipo.Name = "lblFolhaTipo";
+        this.lblFolhaTipo.Size = new System.Drawing.Size(35, 15);
+        this.lblFolhaTipo.TabIndex = 0;
+        this.lblFolhaTipo.Text = "Tipo:";
+        // 
+        // cmbFolhaTipo
+        // 
+        this.cmbFolhaTipo.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbFolhaTipo.Location = new System.Drawing.Point(52, 22);
+        this.cmbFolhaTipo.Name = "cmbFolhaTipo";
+        this.cmbFolhaTipo.Size = new System.Drawing.Size(180, 23);
+        this.cmbFolhaTipo.TabIndex = 1;
+        // 
+        // lblFolhaModo
+        // 
+        this.lblFolhaModo.AutoSize = true;
+        this.lblFolhaModo.Location = new System.Drawing.Point(248, 26);
+        this.lblFolhaModo.Name = "lblFolhaModo";
+        this.lblFolhaModo.Size = new System.Drawing.Size(43, 15);
+        this.lblFolhaModo.TabIndex = 2;
+        this.lblFolhaModo.Text = "Modo:";
+        // 
+        // cmbFolhaModo
+        // 
+        this.cmbFolhaModo.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbFolhaModo.Location = new System.Drawing.Point(294, 22);
+        this.cmbFolhaModo.Name = "cmbFolhaModo";
+        this.cmbFolhaModo.Size = new System.Drawing.Size(160, 23);
+        this.cmbFolhaModo.TabIndex = 3;
+        // 
+        // btnGerarFolha
+        // 
+        this.btnGerarFolha.Enabled = false;
+        this.btnGerarFolha.Location = new System.Drawing.Point(470, 20);
+        this.btnGerarFolha.Name = "btnGerarFolha";
+        this.btnGerarFolha.Size = new System.Drawing.Size(160, 28);
+        this.btnGerarFolha.TabIndex = 4;
+        this.btnGerarFolha.Text = "Gerar CSV";
+        this.btnGerarFolha.UseVisualStyleBackColor = true;
+        this.btnGerarFolha.Click += new EventHandler(this.btnGerarFolha_Click);
+        // 
+        // btnSalvarFolha
+        // 
+        this.btnSalvarFolha.Enabled = false;
+        this.btnSalvarFolha.Location = new System.Drawing.Point(636, 20);
+        this.btnSalvarFolha.Name = "btnSalvarFolha";
+        this.btnSalvarFolha.Size = new System.Drawing.Size(160, 28);
+        this.btnSalvarFolha.TabIndex = 5;
+        this.btnSalvarFolha.Text = "Salvar arquivo...";
+        this.btnSalvarFolha.UseVisualStyleBackColor = true;
+        this.btnSalvarFolha.Click += new EventHandler(this.btnSalvarFolha_Click);
+        // 
+        // lblTotalFolha
+        // 
+        this.lblTotalFolha.Anchor = ((AnchorStyles)((AnchorStyles.Top | AnchorStyles.Right)));
+        this.lblTotalFolha.Location = new System.Drawing.Point(640, 56);
+        this.lblTotalFolha.Name = "lblTotalFolha";
+        this.lblTotalFolha.Size = new System.Drawing.Size(304, 20);
+        this.lblTotalFolha.TabIndex = 6;
+        this.lblTotalFolha.Text = "Total: R$ 0,00";
+        this.lblTotalFolha.TextAlign = ContentAlignment.MiddleRight;
+        // 
+        // dgvFolha
+        // 
+        this.dgvFolha.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.dgvFolha.AllowUserToAddRows = false;
+        this.dgvFolha.AllowUserToDeleteRows = false;
+        this.dgvFolha.Location = new System.Drawing.Point(16, 84);
+        this.dgvFolha.Name = "dgvFolha";
+        this.dgvFolha.RowHeadersVisible = false;
+        this.dgvFolha.Size = new System.Drawing.Size(928, 124);
+        this.dgvFolha.TabIndex = 7;
+        // 
+        // txtResultadoFolha
+        // 
+        this.txtResultadoFolha.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.txtResultadoFolha.Location = new System.Drawing.Point(16, 214);
+        this.txtResultadoFolha.Multiline = true;
+        this.txtResultadoFolha.Name = "txtResultadoFolha";
+        this.txtResultadoFolha.ReadOnly = true;
+        this.txtResultadoFolha.ScrollBars = ScrollBars.Both;
+        this.txtResultadoFolha.Size = new System.Drawing.Size(928, 56);
+        this.txtResultadoFolha.TabIndex = 8;
+        this.txtResultadoFolha.Font = new System.Drawing.Font("Consolas", 9F);
+        // 
+        // grpGuias
+        // 
+        this.grpGuias.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.grpGuias.Controls.Add(this.lblGuiasComp);
+        this.grpGuias.Controls.Add(this.btnGerarGuias);
+        this.grpGuias.Controls.Add(this.btnSalvarGuias);
+        this.grpGuias.Controls.Add(this.lblTotalGuias);
+        this.grpGuias.Controls.Add(this.dgvGuias);
+        this.grpGuias.Controls.Add(this.txtResultadoGuias);
+        this.grpGuias.Dock = System.Windows.Forms.DockStyle.Fill;
+        this.grpGuias.Location = new System.Drawing.Point(3, 3);
+        this.grpGuias.Name = "grpGuias";
+        this.grpGuias.Size = new System.Drawing.Size(954, 302);
+        this.grpGuias.TabIndex = 5;
+        this.grpGuias.TabStop = false;
+        this.grpGuias.Text = "Guias (INSS / IRRF / FGTS / eCONSIGNADO)";
+        // 
+        // lblGuiasComp
+        // 
+        this.lblGuiasComp.AutoSize = true;
+        this.lblGuiasComp.Location = new System.Drawing.Point(16, 26);
+        this.lblGuiasComp.Name = "lblGuiasComp";
+        this.lblGuiasComp.Size = new System.Drawing.Size(79, 15);
+        this.lblGuiasComp.TabIndex = 0;
+        this.lblGuiasComp.Text = "Competência:";
+        // 
+        // btnGerarGuias
+        // 
+        this.btnGerarGuias.Enabled = false;
+        this.btnGerarGuias.Location = new System.Drawing.Point(150, 20);
+        this.btnGerarGuias.Name = "btnGerarGuias";
+        this.btnGerarGuias.Size = new System.Drawing.Size(140, 28);
+        this.btnGerarGuias.TabIndex = 1;
+        this.btnGerarGuias.Text = "Gerar CSV Guias";
+        this.btnGerarGuias.UseVisualStyleBackColor = true;
+        this.btnGerarGuias.Click += new EventHandler(this.btnGerarGuias_Click);
+        // 
+        // btnSalvarGuias
+        // 
+        this.btnSalvarGuias.Enabled = false;
+        this.btnSalvarGuias.Location = new System.Drawing.Point(296, 20);
+        this.btnSalvarGuias.Name = "btnSalvarGuias";
+        this.btnSalvarGuias.Size = new System.Drawing.Size(140, 28);
+        this.btnSalvarGuias.TabIndex = 2;
+        this.btnSalvarGuias.Text = "Salvar arquivo...";
+        this.btnSalvarGuias.UseVisualStyleBackColor = true;
+        this.btnSalvarGuias.Click += new EventHandler(this.btnSalvarGuias_Click);
+        // 
+        // lblTotalGuias
+        // 
+        this.lblTotalGuias.Anchor = ((AnchorStyles)((AnchorStyles.Top | AnchorStyles.Right)));
+        this.lblTotalGuias.Location = new System.Drawing.Point(640, 24);
+        this.lblTotalGuias.Name = "lblTotalGuias";
+        this.lblTotalGuias.Size = new System.Drawing.Size(304, 20);
+        this.lblTotalGuias.TabIndex = 3;
+        this.lblTotalGuias.Text = "Total: R$ 0,00";
+        this.lblTotalGuias.TextAlign = ContentAlignment.MiddleRight;
+        // 
+        // dgvGuias
+        // 
+        this.dgvGuias.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.dgvGuias.AllowUserToAddRows = false;
+        this.dgvGuias.AllowUserToDeleteRows = false;
+        this.dgvGuias.Location = new System.Drawing.Point(16, 56);
+        this.dgvGuias.Name = "dgvGuias";
+        this.dgvGuias.RowHeadersVisible = false;
+        this.dgvGuias.Size = new System.Drawing.Size(928, 96);
+        this.dgvGuias.TabIndex = 4;
+        // 
+        // txtResultadoGuias
+        // 
+        this.txtResultadoGuias.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.txtResultadoGuias.Location = new System.Drawing.Point(16, 158);
+        this.txtResultadoGuias.Multiline = true;
+        this.txtResultadoGuias.Name = "txtResultadoGuias";
+        this.txtResultadoGuias.ReadOnly = true;
+        this.txtResultadoGuias.ScrollBars = ScrollBars.Both;
+        this.txtResultadoGuias.Size = new System.Drawing.Size(928, 80);
+        this.txtResultadoGuias.TabIndex = 5;
+        this.txtResultadoGuias.Font = new System.Drawing.Font("Consolas", 9F);
+        // 
+        // grpGrf
+        // 
+        this.grpGrf.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.grpGrf.Controls.Add(this.lblGrfPeriodo);
+        this.grpGrf.Controls.Add(this.mtbGrfIni);
+        this.grpGrf.Controls.Add(this.lblGrfAte);
+        this.grpGrf.Controls.Add(this.mtbGrfFim);
+        this.grpGrf.Controls.Add(this.lblGrfLote);
+        this.grpGrf.Controls.Add(this.mtbGrfLote);
+        this.grpGrf.Controls.Add(this.lblGrfCentro);
+        this.grpGrf.Controls.Add(this.txtGrfCentro);
+        this.grpGrf.Controls.Add(this.btnCarregarGrf);
+        this.grpGrf.Controls.Add(this.btnGerarGrf);
+        this.grpGrf.Controls.Add(this.btnSalvarGrf);
+        this.grpGrf.Controls.Add(this.lblTotalGrf);
+        this.grpGrf.Controls.Add(this.dgvGrf);
+        this.grpGrf.Controls.Add(this.txtResultadoGrf);
+        this.grpGrf.Dock = System.Windows.Forms.DockStyle.Fill;
+        this.grpGrf.Location = new System.Drawing.Point(3, 3);
+        this.grpGrf.Name = "grpGrf";
+        this.grpGrf.Size = new System.Drawing.Size(954, 302);
+        this.grpGrf.TabIndex = 3;
+        this.grpGrf.TabStop = false;
+        this.grpGrf.Text = "Lote GRRF (rescisões)";
+        // 
+        // lblGrfPeriodo
+        // 
+        this.lblGrfPeriodo.AutoSize = true;
+        this.lblGrfPeriodo.Location = new System.Drawing.Point(16, 24);
+        this.lblGrfPeriodo.Name = "lblGrfPeriodo";
+        this.lblGrfPeriodo.Size = new System.Drawing.Size(52, 15);
+        this.lblGrfPeriodo.TabIndex = 0;
+        this.lblGrfPeriodo.Text = "Venc. de:";
+        // 
+        // mtbGrfIni
+        // 
+        this.mtbGrfIni.Location = new System.Drawing.Point(72, 20);
+        this.mtbGrfIni.Mask = "00/00/0000";
+        this.mtbGrfIni.Name = "mtbGrfIni";
+        this.mtbGrfIni.Size = new System.Drawing.Size(80, 23);
+        this.mtbGrfIni.TabIndex = 1;
+        this.mtbGrfIni.Text = "01082025";
+        // 
+        // lblGrfAte
+        // 
+        this.lblGrfAte.AutoSize = true;
+        this.lblGrfAte.Location = new System.Drawing.Point(158, 24);
+        this.lblGrfAte.Name = "lblGrfAte";
+        this.lblGrfAte.Size = new System.Drawing.Size(29, 15);
+        this.lblGrfAte.TabIndex = 2;
+        this.lblGrfAte.Text = "até:";
+        // 
+        // mtbGrfFim
+        // 
+        this.mtbGrfFim.Location = new System.Drawing.Point(190, 20);
+        this.mtbGrfFim.Mask = "00/00/0000";
+        this.mtbGrfFim.Name = "mtbGrfFim";
+        this.mtbGrfFim.Size = new System.Drawing.Size(80, 23);
+        this.mtbGrfFim.TabIndex = 3;
+        this.mtbGrfFim.Text = "31122025";
+        // 
+        // lblGrfLote
+        // 
+        this.lblGrfLote.AutoSize = true;
+        this.lblGrfLote.Location = new System.Drawing.Point(290, 24);
+        this.lblGrfLote.Name = "lblGrfLote";
+        this.lblGrfLote.Size = new System.Drawing.Size(73, 15);
+        this.lblGrfLote.TabIndex = 4;
+        this.lblGrfLote.Text = "Data do lote:";
+        // 
+        // mtbGrfLote
+        // 
+        this.mtbGrfLote.Location = new System.Drawing.Point(368, 20);
+        this.mtbGrfLote.Mask = "00/00/0000";
+        this.mtbGrfLote.Name = "mtbGrfLote";
+        this.mtbGrfLote.Size = new System.Drawing.Size(80, 23);
+        this.mtbGrfLote.TabIndex = 5;
+        this.mtbGrfLote.Text = "12082025";
+        // 
+        // lblGrfCentro
+        // 
+        this.lblGrfCentro.AutoSize = true;
+        this.lblGrfCentro.Location = new System.Drawing.Point(470, 24);
+        this.lblGrfCentro.Name = "lblGrfCentro";
+        this.lblGrfCentro.Size = new System.Drawing.Size(72, 15);
+        this.lblGrfCentro.TabIndex = 6;
+        this.lblGrfCentro.Text = "Centro (B):";
+        // 
+        // txtGrfCentro
+        // 
+        this.txtGrfCentro.Location = new System.Drawing.Point(546, 20);
+        this.txtGrfCentro.Name = "txtGrfCentro";
+        this.txtGrfCentro.Size = new System.Drawing.Size(90, 23);
+        this.txtGrfCentro.TabIndex = 7;
+        this.txtGrfCentro.Text = "305";
+        // 
+        // btnCarregarGrf
+        // 
+        this.btnCarregarGrf.Enabled = false;
+        this.btnCarregarGrf.Location = new System.Drawing.Point(652, 18);
+        this.btnCarregarGrf.Name = "btnCarregarGrf";
+        this.btnCarregarGrf.Size = new System.Drawing.Size(140, 28);
+        this.btnCarregarGrf.TabIndex = 8;
+        this.btnCarregarGrf.Text = "Carregar GRRF";
+        this.btnCarregarGrf.UseVisualStyleBackColor = true;
+        this.btnCarregarGrf.Click += new EventHandler(this.btnCarregarGrf_Click);
+        // 
+        // btnGerarGrf
+        // 
+        this.btnGerarGrf.Enabled = false;
+        this.btnGerarGrf.Location = new System.Drawing.Point(16, 52);
+        this.btnGerarGrf.Name = "btnGerarGrf";
+        this.btnGerarGrf.Size = new System.Drawing.Size(140, 28);
+        this.btnGerarGrf.TabIndex = 9;
+        this.btnGerarGrf.Text = "Gerar CSV GRRF";
+        this.btnGerarGrf.UseVisualStyleBackColor = true;
+        this.btnGerarGrf.Click += new EventHandler(this.btnGerarGrf_Click);
+        // 
+        // btnSalvarGrf
+        // 
+        this.btnSalvarGrf.Enabled = false;
+        this.btnSalvarGrf.Location = new System.Drawing.Point(162, 52);
+        this.btnSalvarGrf.Name = "btnSalvarGrf";
+        this.btnSalvarGrf.Size = new System.Drawing.Size(140, 28);
+        this.btnSalvarGrf.TabIndex = 10;
+        this.btnSalvarGrf.Text = "Salvar arquivo...";
+        this.btnSalvarGrf.UseVisualStyleBackColor = true;
+        this.btnSalvarGrf.Click += new EventHandler(this.btnSalvarGrf_Click);
+        // 
+        // lblTotalGrf
+        // 
+        this.lblTotalGrf.Anchor = ((AnchorStyles)((AnchorStyles.Top | AnchorStyles.Right)));
+        this.lblTotalGrf.Location = new System.Drawing.Point(640, 56);
+        this.lblTotalGrf.Name = "lblTotalGrf";
+        this.lblTotalGrf.Size = new System.Drawing.Size(304, 20);
+        this.lblTotalGrf.TabIndex = 11;
+        this.lblTotalGrf.Text = "Total: R$ 0,00";
+        this.lblTotalGrf.TextAlign = ContentAlignment.MiddleRight;
+        // 
+        // dgvGrf
+        // 
+        this.dgvGrf.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.dgvGrf.AllowUserToAddRows = false;
+        this.dgvGrf.AllowUserToDeleteRows = false;
+        this.dgvGrf.Location = new System.Drawing.Point(16, 88);
+        this.dgvGrf.Name = "dgvGrf";
+        this.dgvGrf.RowHeadersVisible = false;
+        this.dgvGrf.Size = new System.Drawing.Size(928, 120);
+        this.dgvGrf.TabIndex = 12;
+        // 
+        // txtResultadoGrf
+        // 
+        this.txtResultadoGrf.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.txtResultadoGrf.Location = new System.Drawing.Point(16, 214);
+        this.txtResultadoGrf.Multiline = true;
+        this.txtResultadoGrf.Name = "txtResultadoGrf";
+        this.txtResultadoGrf.ReadOnly = true;
+        this.txtResultadoGrf.ScrollBars = ScrollBars.Both;
+        this.txtResultadoGrf.Size = new System.Drawing.Size(928, 56);
+        this.txtResultadoGrf.TabIndex = 13;
+        this.txtResultadoGrf.Font = new System.Drawing.Font("Consolas", 9F);
+        // 
+        // tabExport
+        // 
+        this.tabExport.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.tabExport.Controls.Add(this.tabGrf);
+        this.tabExport.Controls.Add(this.tabFolha);
+        this.tabExport.Controls.Add(this.tabGuias);
+        this.tabExport.Location = new System.Drawing.Point(12, 710);
+        this.tabExport.Name = "tabExport";
+        this.tabExport.SelectedIndex = 0;
+        this.tabExport.Size = new System.Drawing.Size(960, 330);
+        this.tabExport.TabIndex = 40;
+        // 
+        // tabGrf
+        // 
+        this.tabGrf.Controls.Add(this.grpGrf);
+        this.tabGrf.Location = new System.Drawing.Point(4, 24);
+        this.tabGrf.Name = "tabGrf";
+        this.tabGrf.Padding = new System.Windows.Forms.Padding(3);
+        this.tabGrf.Size = new System.Drawing.Size(952, 302);
+        this.tabGrf.TabIndex = 0;
+        this.tabGrf.Text = "Lote GRRF";
+        this.tabGrf.UseVisualStyleBackColor = true;
+        // 
+        // tabFolha
+        // 
+        this.tabFolha.Controls.Add(this.grpFolha);
+        this.tabFolha.Location = new System.Drawing.Point(4, 24);
+        this.tabFolha.Name = "tabFolha";
+        this.tabFolha.Padding = new System.Windows.Forms.Padding(3);
+        this.tabFolha.Size = new System.Drawing.Size(952, 302);
+        this.tabFolha.TabIndex = 1;
+        this.tabFolha.Text = "Folha / Férias / Rescisões";
+        this.tabFolha.UseVisualStyleBackColor = true;
+        // 
+        // tabGuias
+        // 
+        this.tabGuias.Controls.Add(this.grpGuias);
+        this.tabGuias.Location = new System.Drawing.Point(4, 24);
+        this.tabGuias.Name = "tabGuias";
+        this.tabGuias.Padding = new System.Windows.Forms.Padding(3);
+        this.tabGuias.Size = new System.Drawing.Size(952, 302);
+        this.tabGuias.TabIndex = 2;
+        this.tabGuias.Text = "Guias";
+        this.tabGuias.UseVisualStyleBackColor = true;
+        // 
         // Form1
         // 
         this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
         this.AutoScaleMode = AutoScaleMode.Font;
-        this.ClientSize = new System.Drawing.Size(984, 714);
+        this.ClientSize = new System.Drawing.Size(984, 1050);
+        this.Controls.Add(this.tabExport);
         this.Controls.Add(this.grpCsv);
         this.Controls.Add(this.grpDados);
         this.Controls.Add(this.grpBanco);
         this.Name = "Form1";
         this.StartPosition = FormStartPosition.CenterScreen;
-        this.MinimumSize = new System.Drawing.Size(984, 714);
+        this.MinimumSize = new System.Drawing.Size(984, 900);
         this.Text = "Importação Folha de Pagamento - Sienge (ENGEMAT)";
         this.grpBanco.ResumeLayout(false);
         this.grpDados.ResumeLayout(false);
@@ -477,6 +951,19 @@ partial class Form1
         ((System.ComponentModel.ISupportInitialize)(this.dgvCentros)).EndInit();
         this.grpCsv.ResumeLayout(false);
         this.grpCsv.PerformLayout();
+        ((System.ComponentModel.ISupportInitialize)(this.dgvGrf)).EndInit();
+        this.grpGrf.ResumeLayout(false);
+        this.grpGrf.PerformLayout();
+        ((System.ComponentModel.ISupportInitialize)(this.dgvFolha)).EndInit();
+        this.grpFolha.ResumeLayout(false);
+        this.grpFolha.PerformLayout();
+        ((System.ComponentModel.ISupportInitialize)(this.dgvGuias)).EndInit();
+        this.grpGuias.ResumeLayout(false);
+        this.grpGuias.PerformLayout();
+        this.tabGrf.ResumeLayout(false);
+        this.tabFolha.ResumeLayout(false);
+        this.tabGuias.ResumeLayout(false);
+        this.tabExport.ResumeLayout(false);
         this.ResumeLayout(false);
     }
 }
