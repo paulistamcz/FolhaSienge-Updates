@@ -762,6 +762,17 @@ public partial class Form1 : Form
             if (cmbFolhaCentro.SelectedItem is ComboCentro cc && cc.Codigo > 0)
                 centrosFiltro = new HashSet<int> { cc.Codigo };
 
+            // Pedir dados de apropriação (obra G, unidade H, item I) ao gerar
+            string obra = "", unidade = "", itemOrc = "";
+            using (var dlg = new PromptApropriacao("Apropriação - Folha / Férias / Rescisões"))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK)
+                    return;
+                obra = dlg.Obra;
+                unidade = dlg.Unidade;
+                itemOrc = dlg.Item;
+            }
+
             if (tipo == 2 || tipo == 3)
             {
                 if (analitico)
@@ -777,7 +788,7 @@ public partial class Form1 : Form
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
-                    _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, obs);
+                    _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, obs, obra, unidade, itemOrc);
                     decimal total = linhas.Sum(x => x.Valor);
                     lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -810,7 +821,7 @@ public partial class Form1 : Form
                     var linhasCompletas = centros
                         .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, credorCod, credorNome))
                         .ToList();
-                    _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, obs);
+                    _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, obs, obra, unidade, itemOrc);
                     decimal total = centros.Sum(x => x.Total);
                     lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -839,7 +850,7 @@ public partial class Form1 : Form
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, obs);
+                _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, obs, obra, unidade, itemOrc);
                 decimal total = linhas.Sum(x => x.Liquido);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -873,7 +884,7 @@ public partial class Form1 : Form
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, obs);
+                _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, obs, obra, unidade, itemOrc);
                 decimal total = linhasCompletas.Sum(x => x.Total);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 

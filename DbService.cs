@@ -304,7 +304,8 @@ public class DbService
 
     public static string GerarCsv(
         List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)> linhas,
-        string vencimento, string verba, string competenciaDoc, string observacao = "")
+        string vencimento, string verba, string competenciaDoc, string observacao = "",
+        string obra = "", string unidade = "", string itemOrcamento = "")
     {
         var sb = new System.Text.StringBuilder();
         int i = 1;
@@ -314,7 +315,7 @@ public class DbService
             var credorCodigo = string.IsNullOrWhiteSpace(l.CredorCodigo) ? $"CRED{i:D2}" : l.CredorCodigo;
             var credorNome = string.IsNullOrWhiteSpace(l.CredorNome) ? l.Nome : l.CredorNome;
             var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};;;;;{competenciaDoc};{observacao}");
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};;{competenciaDoc};{observacao}");
             i++;
         }
         return sb.ToString();
@@ -353,14 +354,15 @@ public class DbService
 
     /// <summary>
     /// Gera CSV analítico (1 linha por empregado) no layout Sienge.
-    /// Layout: verba;centro;credorCodigo;credorNome;valor;vencimento;;;;;doc;obs
+    /// Layout: verba;centro;credorCodigo;credorNome;valor;vencimento;obra;unidade;item;depto;doc;obs
     /// credorCodigo/credorNome da verba são aplicados a todas as linhas (o credor
     /// do pagamento é a empresa/verba; o nome do empregado vai na observação L).
     /// </summary>
     public static string GerarCsvAnalitico(
         List<(int Centro, string NomeEmpregado, int Empregado, decimal Liquido)> linhas,
         string vencimento, string verba, string credorCodigo, string credorNome,
-        string competenciaDoc, string observacao = "")
+        string competenciaDoc, string observacao = "",
+        string obra = "", string unidade = "", string itemOrcamento = "")
     {
         var sb = new System.Text.StringBuilder();
         foreach (var l in linhas)
@@ -368,7 +370,7 @@ public class DbService
             var cc = l.Centro.ToString("D4");
             var valor = l.Liquido.ToString("0.00", CultureInfo.InvariantCulture);
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.NomeEmpregado : observacao + " - " + l.NomeEmpregado;
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};;;;;{competenciaDoc};{obs}");
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};;{competenciaDoc};{obs}");
         }
         return sb.ToString();
     }
