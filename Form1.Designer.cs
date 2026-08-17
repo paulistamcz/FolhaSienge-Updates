@@ -80,7 +80,10 @@ partial class Form1
     private TextBox txtResultadoFolha;
 
     private GroupBox grpGuias;
-    private Label lblGuiasComp;
+    private Label lblGuiasTipo;
+    private ComboBox cmbGuiasTipo;
+    private Label lblGuiasModo;
+    private ComboBox cmbGuiasModo;
     private Button btnGerarGuias;
     private Button btnSalvarGuias;
     private Label lblTotalGuias;
@@ -156,7 +159,10 @@ partial class Form1
         this.dgvFolha = new DataGridView();
         this.txtResultadoFolha = new TextBox();
         this.grpGuias = new GroupBox();
-        this.lblGuiasComp = new Label();
+        this.lblGuiasTipo = new Label();
+        this.cmbGuiasTipo = new ComboBox();
+        this.lblGuiasModo = new Label();
+        this.cmbGuiasModo = new ComboBox();
         this.btnGerarGuias = new Button();
         this.btnSalvarGuias = new Button();
         this.lblTotalGuias = new Label();
@@ -671,7 +677,10 @@ partial class Form1
         // grpGuias
         // 
         this.grpGuias.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
-        this.grpGuias.Controls.Add(this.lblGuiasComp);
+        this.grpGuias.Controls.Add(this.lblGuiasTipo);
+        this.grpGuias.Controls.Add(this.cmbGuiasTipo);
+        this.grpGuias.Controls.Add(this.lblGuiasModo);
+        this.grpGuias.Controls.Add(this.cmbGuiasModo);
         this.grpGuias.Controls.Add(this.btnGerarGuias);
         this.grpGuias.Controls.Add(this.btnSalvarGuias);
         this.grpGuias.Controls.Add(this.lblTotalGuias);
@@ -683,24 +692,49 @@ partial class Form1
         this.grpGuias.Size = new System.Drawing.Size(954, 302);
         this.grpGuias.TabIndex = 5;
         this.grpGuias.TabStop = false;
-        this.grpGuias.Text = "Guias (INSS / IRRF / FGTS / eCONSIGNADO)";
+        this.grpGuias.Text = "Guias (INSS / IRRF / FGTS / eCONSIGNADO / GRRF)";
         // 
-        // lblGuiasComp
+        // lblGuiasTipo
         // 
-        this.lblGuiasComp.AutoSize = true;
-        this.lblGuiasComp.Location = new System.Drawing.Point(16, 26);
-        this.lblGuiasComp.Name = "lblGuiasComp";
-        this.lblGuiasComp.Size = new System.Drawing.Size(79, 15);
-        this.lblGuiasComp.TabIndex = 0;
-        this.lblGuiasComp.Text = "Competência:";
+        this.lblGuiasTipo.AutoSize = true;
+        this.lblGuiasTipo.Location = new System.Drawing.Point(16, 26);
+        this.lblGuiasTipo.Name = "lblGuiasTipo";
+        this.lblGuiasTipo.Size = new System.Drawing.Size(35, 15);
+        this.lblGuiasTipo.TabIndex = 0;
+        this.lblGuiasTipo.Text = "Tipo:";
+        // 
+        // cmbGuiasTipo
+        // 
+        this.cmbGuiasTipo.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbGuiasTipo.Location = new System.Drawing.Point(52, 22);
+        this.cmbGuiasTipo.Name = "cmbGuiasTipo";
+        this.cmbGuiasTipo.Size = new System.Drawing.Size(150, 23);
+        this.cmbGuiasTipo.TabIndex = 1;
+        // 
+        // lblGuiasModo
+        // 
+        this.lblGuiasModo.AutoSize = true;
+        this.lblGuiasModo.Location = new System.Drawing.Point(216, 26);
+        this.lblGuiasModo.Name = "lblGuiasModo";
+        this.lblGuiasModo.Size = new System.Drawing.Size(43, 15);
+        this.lblGuiasModo.TabIndex = 2;
+        this.lblGuiasModo.Text = "Modo:";
+        // 
+        // cmbGuiasModo
+        // 
+        this.cmbGuiasModo.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbGuiasModo.Location = new System.Drawing.Point(262, 22);
+        this.cmbGuiasModo.Name = "cmbGuiasModo";
+        this.cmbGuiasModo.Size = new System.Drawing.Size(180, 23);
+        this.cmbGuiasModo.TabIndex = 3;
         // 
         // btnGerarGuias
         // 
         this.btnGerarGuias.Enabled = false;
-        this.btnGerarGuias.Location = new System.Drawing.Point(150, 20);
+        this.btnGerarGuias.Location = new System.Drawing.Point(456, 20);
         this.btnGerarGuias.Name = "btnGerarGuias";
         this.btnGerarGuias.Size = new System.Drawing.Size(140, 28);
-        this.btnGerarGuias.TabIndex = 1;
+        this.btnGerarGuias.TabIndex = 4;
         this.btnGerarGuias.Text = "Gerar CSV Guias";
         this.btnGerarGuias.UseVisualStyleBackColor = true;
         this.btnGerarGuias.Click += new EventHandler(this.btnGerarGuias_Click);
@@ -708,10 +742,10 @@ partial class Form1
         // btnSalvarGuias
         // 
         this.btnSalvarGuias.Enabled = false;
-        this.btnSalvarGuias.Location = new System.Drawing.Point(296, 20);
+        this.btnSalvarGuias.Location = new System.Drawing.Point(602, 20);
         this.btnSalvarGuias.Name = "btnSalvarGuias";
         this.btnSalvarGuias.Size = new System.Drawing.Size(140, 28);
-        this.btnSalvarGuias.TabIndex = 2;
+        this.btnSalvarGuias.TabIndex = 5;
         this.btnSalvarGuias.Text = "Salvar arquivo...";
         this.btnSalvarGuias.UseVisualStyleBackColor = true;
         this.btnSalvarGuias.Click += new EventHandler(this.btnSalvarGuias_Click);

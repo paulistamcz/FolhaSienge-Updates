@@ -365,4 +365,430 @@ public static class RelatorioPdf
         gfx.DrawString(VerbaFinanceira.FormatarValor(total), fonteBold, XBrushes.White,
             new XRect(X0 + ColsDetalhe[0] + ColsDetalhe[1] + ColsDetalhe[2], y + 2, ColsDetalhe[3] - 6, AlturaMinima - 4), XStringFormats.CenterRight);
     }
+
+    /// <summary>
+    /// Gera o relatório detalhado por funcionário de um centro de custo.
+    /// Mostra líquido, proventos, descontos, encargos/guias e empréstimos de cada pessoa.
+    /// </summary>
+    /// <summary>Colunas da tabela detalhada (planilha).</summary>
+    private static readonly float[] ColsFunc = { 40, 55, 175, 75, 78, 78, 62, 62, 62, 75 };
+    private static readonly string[] HeadersFunc =
+    {
+        "Matr.", "Centro", "Funcionário", "Líquido", "Proventos", "Descontos", "FGTS", "INSS", "IRRF", "Empréstimos"
+    };
+
+    public static void GerarDetalhado(string caminho, string competencia,
+        int centroCodigo, string centroNome, List<DbService.FuncionarioDetalhe> funcionarios)
+    {
+        using var doc = new PdfDocument();
+        PdfPage page = NovaPagina(doc);
+        XGraphics gfx = XGraphics.FromPdfPage(page);
+
+        var fonteTitulo = new XFont("Arial", 13, XFontStyleEx.Bold);
+        var fonteSub = new XFont("Arial", 9, XFontStyleEx.Regular);
+        var fonteCab = new XFont("Arial", 8, XFontStyleEx.Bold);
+        var fonte = new XFont("Arial", 8, XFontStyleEx.Regular);
+        var fonteBold = new XFont("Arial", 8, XFontStyleEx.Bold);
+        const float linhaAlt = 18;
+
+        float y = 28;
+        gfx.DrawString("RELATÓRIO MENSAL POR FUNCIONÁRIO - CENTRO DE CUSTO - SIENGE (ENGEMAT)",
+            fonteTitulo, XBrushes.Black, new XPoint(X0, y));
+        y += 18;
+        gfx.DrawString($"Competência: {competencia}    Centro: {centroCodigo:D4} - {centroNome}    " +
+                       $"Funcionários: {funcionarios.Count}    Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
+            fonteSub, XBrushes.DarkGray, new XPoint(X0, y));
+        y += 14;
+
+        // cabeçalho da tabela
+        float largTotal = ColsFunc.Sum();
+        DrawFuncHeader(gfx, y, fonteCab, linhaAlt);
+        y += linhaAlt;
+
+        // totais do centro
+        decimal tLiq = 0, tProv = 0, tDesc = 0, tFgts = 0, tInss = 0, tIrrf = 0, tEmp = 0;
+        foreach (var f in funcionarios)
+        {
+            tLiq += f.Liquido; tProv += f.TotalProventos; tDesc += f.TotalDescontos;
+            tFgts += f.Fgts; tInss += f.Inss; tIrrf += f.Irrf; tEmp += f.TotalEmprestimos;
+        }
+
+        // linhas
+        float x;
+        for (int i = 0; i < funcionarios.Count; i++)
+        {
+            var f = funcionarios[i];
+            (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+            if (y == 30) { DrawFuncHeader(gfx, y, fonteCab, linhaAlt); y += linhaAlt; }
+            var zebra = i % 2 == 0 ? XBrushes.White : XBrushes.AliceBlue;
+            x = X0;
+            var cells = new string[]
+            {
+                f.Empregado.ToString(),
+                f.Centro.ToString("D4"),
+                f.Nome,
+                VerbaFinanceira.FormatarValor(f.Liquido),
+                VerbaFinanceira.FormatarValor(f.TotalProventos),
+                VerbaFinanceira.FormatarValor(f.TotalDescontos),
+                VerbaFinanceira.FormatarValor(f.Fgts),
+                VerbaFinanceira.FormatarValor(f.Inss),
+                VerbaFinanceira.FormatarValor(f.Irrf),
+                VerbaFinanceira.FormatarValor(f.TotalEmprestimos),
+            };
+            for (int c = 0; c < ColsFunc.Length; c++)
+            {
+                gfx.DrawRectangle(zebra, x, y, ColsFunc[c], linhaAlt);
+                gfx.DrawRectangle(XBrushes.Silver, x, y, ColsFunc[c], 0.4f); // borda inferior fina
+                var rect = new XRect(x + 2, y, ColsFunc[c] - 4, linhaAlt);
+                var alinh = c == 2 ? XStringFormats.TopLeft : c >= 3 ? XStringFormats.CenterRight : XStringFormats.Center;
+                gfx.DrawString(cells[c], c == 2 ? fonte : fonte, XBrushes.Black, rect, alinh);
+                x += ColsFunc[c];
+            }
+            y += linhaAlt;
+        }
+
+        // linha de totais por coluna
+        (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+        if (y == 30) { DrawFuncHeader(gfx, y, fonteCab, linhaAlt); y += linhaAlt; }
+        gfx.DrawRectangle(XBrushes.SteelBlue, X0, y, largTotal, linhaAlt);
+        var totais = new string[]
+        {
+            "", "", $"TOTAL ({funcionarios.Count})",
+            VerbaFinanceira.FormatarValor(tLiq), VerbaFinanceira.FormatarValor(tProv),
+            VerbaFinanceira.FormatarValor(tDesc), VerbaFinanceira.FormatarValor(tFgts),
+            VerbaFinanceira.FormatarValor(tInss), VerbaFinanceira.FormatarValor(tIrrf),
+            VerbaFinanceira.FormatarValor(tEmp),
+        };
+        x = X0;
+        for (int c = 0; c < ColsFunc.Length; c++)
+        {
+            var rect = new XRect(x + 2, y, ColsFunc[c] - 4, linhaAlt);
+            var alinh = c == 2 ? XStringFormats.CenterLeft : c >= 3 ? XStringFormats.CenterRight : XStringFormats.Center;
+            gfx.DrawString(totais[c], fonteBold, XBrushes.White, rect, alinh);
+            x += ColsFunc[c];
+        }
+
+        gfx.Dispose();
+        doc.Save(caminho);
+    }
+
+    /// <summary>
+    /// Gera a planilha por centro de custo com o resumo por verba (descrição + valor).
+    /// Uma linha por verba por centro, com totais por centro e geral.
+    /// </summary>
+    public static void GerarPorCentroVerbas(string caminho, string competencia,
+        List<DbService.CentroVerbaResumo> centros)
+    {
+        using var doc = new PdfDocument();
+        PdfPage page = NovaPagina(doc);
+        XGraphics gfx = XGraphics.FromPdfPage(page);
+
+        var fonteTitulo = new XFont("Arial", 13, XFontStyleEx.Bold);
+        var fonteSub = new XFont("Arial", 9, XFontStyleEx.Regular);
+        var fonteCab = new XFont("Arial", 8, XFontStyleEx.Bold);
+        var fonte = new XFont("Arial", 8, XFontStyleEx.Regular);
+        var fonteBold = new XFont("Arial", 8, XFontStyleEx.Bold);
+        const float linhaAlt = 18;
+        float colC = 50, colNome = 250, colEmp = 70, colVerba = 340, colVal = 90;
+        float largTotal = colC + colNome + colEmp + colVerba + colVal;
+
+        float y = 28;
+        gfx.DrawString("RELATÓRIO POR CENTRO DE CUSTO - RESUMO POR VERBA - SIENGE (ENGEMAT)",
+            fonteTitulo, XBrushes.Black, new XPoint(X0, y));
+        y += 18;
+        gfx.DrawString($"Competência: {competencia}    Empresa: ENGEMAT    " +
+                       $"Centros: {centros.Count}    Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
+            fonteSub, XBrushes.DarkGray, new XPoint(X0, y));
+        y += 14;
+
+        void DrawHeader(float yy)
+        {
+            gfx.DrawRectangle(XBrushes.SteelBlue, X0, yy, largTotal, linhaAlt);
+            float xx = X0;
+            gfx.DrawString("Centro", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colC - 4, linhaAlt), XStringFormats.Center);
+            xx += colC;
+            gfx.DrawString("Centro de Custo", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colNome - 4, linhaAlt), XStringFormats.CenterLeft);
+            xx += colNome;
+            gfx.DrawString("Emp", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colEmp - 4, linhaAlt), XStringFormats.Center);
+            xx += colEmp;
+            gfx.DrawString("Verba", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colVerba - 4, linhaAlt), XStringFormats.CenterLeft);
+            xx += colVerba;
+            gfx.DrawString("Valor (R$)", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colVal - 4, linhaAlt), XStringFormats.CenterRight);
+        }
+
+        DrawHeader(y);
+        y += linhaAlt;
+
+        decimal totalGeral = 0m;
+        int linha = 0;
+        foreach (var c in centros)
+        {
+            decimal totalCentro = 0m;
+            foreach (var (desc, val) in c.Verbas)
+            {
+                totalCentro += val;
+                (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+                if (y == 30) { DrawHeader(y); y += linhaAlt; }
+                var zebra = linha % 2 == 0 ? XBrushes.White : XBrushes.AliceBlue;
+                float xx = X0;
+                gfx.DrawRectangle(zebra, xx, y, colC, linhaAlt);
+                gfx.DrawString(c.Centro.ToString("D4"), fonte, XBrushes.Black, new XRect(xx + 2, y, colC - 4, linhaAlt), XStringFormats.Center);
+                xx += colC;
+                gfx.DrawRectangle(zebra, xx, y, colNome, linhaAlt);
+                gfx.DrawString(c.CentroNome, fonte, XBrushes.Black, new XRect(xx + 2, y, colNome - 4, linhaAlt), XStringFormats.TopLeft);
+                xx += colNome;
+                gfx.DrawRectangle(zebra, xx, y, colEmp, linhaAlt);
+                gfx.DrawString(c.Empregados.ToString(), fonte, XBrushes.Black, new XRect(xx + 2, y, colEmp - 4, linhaAlt), XStringFormats.Center);
+                xx += colEmp;
+                gfx.DrawRectangle(zebra, xx, y, colVerba, linhaAlt);
+                gfx.DrawString(desc, fonte, XBrushes.Black, new XRect(xx + 2, y, colVerba - 4, linhaAlt), XStringFormats.TopLeft);
+                xx += colVerba;
+                gfx.DrawRectangle(zebra, xx, y, colVal, linhaAlt);
+                gfx.DrawString(VerbaFinanceira.FormatarValor(val), fonte, XBrushes.Black, new XRect(xx + 2, y, colVal - 4, linhaAlt), XStringFormats.CenterRight);
+                y += linhaAlt;
+                linha++;
+            }
+            // subtotal do centro
+            (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+            if (y == 30) { DrawHeader(y); y += linhaAlt; }
+            float x2 = X0;
+            gfx.DrawRectangle(XBrushes.SteelBlue, x2, y, colC, linhaAlt); x2 += colC;
+            gfx.DrawRectangle(XBrushes.SteelBlue, x2, y, colNome, linhaAlt); x2 += colNome;
+            gfx.DrawRectangle(XBrushes.SteelBlue, x2, y, colEmp, linhaAlt); x2 += colEmp;
+            gfx.DrawRectangle(XBrushes.SteelBlue, x2, y, colVerba, linhaAlt);
+            gfx.DrawString($"SUBTOTAL {c.Centro:D4} {c.CentroNome}", fonteBold, XBrushes.White, new XRect(x2 + 2, y, colVerba - 4, linhaAlt), XStringFormats.CenterLeft);
+            x2 += colVerba;
+            gfx.DrawRectangle(XBrushes.SteelBlue, x2, y, colVal, linhaAlt);
+            gfx.DrawString(VerbaFinanceira.FormatarValor(totalCentro), fonteBold, XBrushes.White, new XRect(x2 + 2, y, colVal - 4, linhaAlt), XStringFormats.CenterRight);
+            y += linhaAlt;
+            totalGeral += totalCentro;
+        }
+
+        // total geral
+        (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+        if (y == 30) { DrawHeader(y); y += linhaAlt; }
+        float xg = X0;
+        gfx.DrawRectangle(XBrushes.DarkSlateBlue, xg, y, colC + colNome + colEmp, linhaAlt);
+        gfx.DrawString($"TOTAL GERAL ({centros.Count} centros)", fonteBold, XBrushes.White, new XRect(xg + 2, y, colC + colNome + colEmp - 4, linhaAlt), XStringFormats.CenterLeft);
+        xg += colC + colNome + colEmp;
+        gfx.DrawRectangle(XBrushes.DarkSlateBlue, xg, y, colVerba, linhaAlt); xg += colVerba;
+        gfx.DrawRectangle(XBrushes.DarkSlateBlue, xg, y, colVal, linhaAlt);
+        gfx.DrawString(VerbaFinanceira.FormatarValor(totalGeral), fonteBold, XBrushes.White, new XRect(xg + 2, y, colVal - 4, linhaAlt), XStringFormats.CenterRight);
+
+        gfx.Dispose();
+        doc.Save(caminho);
+    }
+
+    /// <summary>
+    /// Relatório contábil por centro de custo, organizado em PROVENTOS / DESCONTOS / ENCARGOS,
+    /// com subtotais por seção, total por centro e total geral.
+    /// </summary>
+    public static void GerarResumoContabil(string caminho, string competencia,
+        List<DbService.CentroContabil> centros)
+    {
+        using var doc = new PdfDocument();
+        PdfPage page = NovaPagina(doc);
+        XGraphics gfx = XGraphics.FromPdfPage(page);
+
+        var fonteTitulo = new XFont("Arial", 13, XFontStyleEx.Bold);
+        var fonteSec = new XFont("Arial", 9, XFontStyleEx.Bold);
+        var fonteSub = new XFont("Arial", 9, XFontStyleEx.Regular);
+        var fonte = new XFont("Arial", 8, XFontStyleEx.Regular);
+        var fonteBold = new XFont("Arial", 8, XFontStyleEx.Bold);
+        const float linhaAlt = 17;
+        float colDesc = 620;
+        float colVal = 162;
+
+        float y = 26;
+        gfx.DrawString("FOLHA DE PAGAMENTO POR CENTRO DE CUSTO - RESUMO CONTÁBIL - SIENGE (ENGEMAT)",
+            fonteTitulo, XBrushes.Black, new XPoint(X0, y));
+        y += 18;
+        gfx.DrawString($"Competência: {competencia}    Empresa: ENGEMAT    Centros: {centros.Count}    " +
+                       $"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
+            fonteSub, XBrushes.DarkGray, new XPoint(X0, y));
+        y += 14;
+
+        decimal totalGeral = 0m;
+        foreach (var c in centros)
+        {
+            (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt + 6);
+            gfx.DrawRectangle(XBrushes.SteelBlue, X0, y, colDesc + colVal, linhaAlt + 2);
+            gfx.DrawString($"CENTRO {c.Centro:D4} - {c.CentroNome}   ({c.Empregados} funcionários)",
+                fonteBold, XBrushes.White, new XRect(X0 + 4, y, colDesc - 4, linhaAlt + 2), XStringFormats.CenterLeft);
+            y += linhaAlt + 2;
+
+            void Secao(string titulo, List<(string D, decimal V)> itens, decimal subTotal, XColor cor)
+            {
+                (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+                gfx.DrawRectangle(new XSolidBrush(cor), X0, y, colDesc + colVal, linhaAlt);
+                gfx.DrawString(titulo, fonteSec, XBrushes.White, new XRect(X0 + 4, y, colDesc - 4, linhaAlt), XStringFormats.CenterLeft);
+                y += linhaAlt;
+                foreach (var (d, v) in itens)
+                {
+                    (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+                    gfx.DrawString("   " + d, fonte, XBrushes.Black, new XRect(X0, y - 8, colDesc, linhaAlt), XStringFormats.TopLeft);
+                    gfx.DrawString(VerbaFinanceira.FormatarValor(v), fonte, XBrushes.Black, new XRect(X0 + colDesc + 8, y - 8, colVal - 8, linhaAlt), XStringFormats.TopRight);
+                    y += linhaAlt;
+                }
+                (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+                gfx.DrawString("   SUBTOTAL " + titulo, fonteBold, XBrushes.Black, new XRect(X0, y - 8, colDesc, linhaAlt), XStringFormats.TopLeft);
+                gfx.DrawString(VerbaFinanceira.FormatarValor(subTotal), fonteBold, XBrushes.Black, new XRect(X0 + colDesc + 8, y - 8, colVal - 8, linhaAlt), XStringFormats.TopRight);
+                y += linhaAlt + 2;
+            }
+
+            Secao("PROVENTOS", c.Proventos, c.TotalProventos, XColor.FromArgb(46, 125, 50));
+            Secao("DESCONTOS", c.Descontos, c.TotalDescontos, XColor.FromArgb(198, 40, 40));
+            Secao("ENCARGOS", c.Encargos, c.TotalEncargos, XColor.FromArgb(21, 101, 192));
+
+            // total do centro
+            (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+            gfx.DrawRectangle(XBrushes.DarkSlateBlue, X0, y, colDesc + colVal, linhaAlt);
+            gfx.DrawString($"CUSTO TOTAL DO CENTRO (Proventos + Encargos - Descontos)", fonteBold, XBrushes.White, new XRect(X0 + 4, y, colDesc - 4, linhaAlt), XStringFormats.CenterLeft);
+            gfx.DrawString(VerbaFinanceira.FormatarValor(c.CustoTotal), fonteBold, XBrushes.White, new XRect(X0 + colDesc + 8, y, colVal - 8, linhaAlt), XStringFormats.CenterRight);
+            y += linhaAlt;
+            totalGeral += c.CustoTotal;
+            y += 10;
+        }
+
+        // total geral
+        (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+        gfx.DrawRectangle(XBrushes.Black, X0, y, colDesc + colVal, linhaAlt);
+        gfx.DrawString($"TOTAL GERAL ({centros.Count} centros)", fonteBold, XBrushes.White, new XRect(X0 + 4, y, colDesc - 4, linhaAlt), XStringFormats.CenterLeft);
+        gfx.DrawString(VerbaFinanceira.FormatarValor(totalGeral), fonteBold, XBrushes.White, new XRect(X0 + colDesc + 8, y, colVal - 8, linhaAlt), XStringFormats.CenterRight);
+
+        gfx.Dispose();
+        doc.Save(caminho);
+    }
+
+    /// <summary>
+    /// Relatório de RAZÃO CONTÁBIL por centro de custo: débito/crédito por conta do plano
+    /// financeiro, com saldo por conta, subtotais por centro e total geral. Adequado ao
+    /// fechamento de balanço / lançamentos contábeis da folha.
+    /// </summary>
+    public static void GerarRazaoContabil(string caminho, string competencia,
+        List<DbService.RazaoCentro> centros)
+    {
+        using var doc = new PdfDocument();
+        PdfPage page = NovaPagina(doc);
+        XGraphics gfx = XGraphics.FromPdfPage(page);
+
+        var fonteTitulo = new XFont("Arial", 13, XFontStyleEx.Bold);
+        var fonteSub = new XFont("Arial", 9, XFontStyleEx.Regular);
+        var fonteCab = new XFont("Arial", 8, XFontStyleEx.Bold);
+        var fonte = new XFont("Arial", 8, XFontStyleEx.Regular);
+        var fonteBold = new XFont("Arial", 8, XFontStyleEx.Bold);
+        const float linhaAlt = 18;
+        float colPlano = 90, colDesc = 560, colDeb = 90, colCred = 90, colSaldo = 92;
+        float largTotal = colPlano + colDesc + colDeb + colCred + colSaldo;
+
+        float y = 26;
+        gfx.DrawString("RAZÃO CONTÁBIL DA FOLHA POR CENTRO DE CUSTO - SIENGE (ENGEMAT)",
+            fonteTitulo, XBrushes.Black, new XPoint(X0, y));
+        y += 18;
+        gfx.DrawString($"Competência: {competencia}    Empresa: ENGEMAT    Centros: {centros.Count}    " +
+                       $"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
+            fonteSub, XBrushes.DarkGray, new XPoint(X0, y));
+        y += 14;
+
+        void DrawHeader(float yy)
+        {
+            gfx.DrawRectangle(XBrushes.SteelBlue, X0, yy, largTotal, linhaAlt);
+            float xx = X0;
+            gfx.DrawString("Plano Fin.", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colPlano - 4, linhaAlt), XStringFormats.Center);
+            xx += colPlano;
+            gfx.DrawString("Conta / Verba", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colDesc - 4, linhaAlt), XStringFormats.CenterLeft);
+            xx += colDesc;
+            gfx.DrawString("Débito (R$)", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colDeb - 4, linhaAlt), XStringFormats.CenterRight);
+            xx += colDeb;
+            gfx.DrawString("Crédito (R$)", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colCred - 4, linhaAlt), XStringFormats.CenterRight);
+            xx += colCred;
+            gfx.DrawString("Saldo (R$)", fonteCab, XBrushes.White, new XRect(xx + 2, yy, colSaldo - 4, linhaAlt), XStringFormats.CenterRight);
+        }
+
+        decimal totalDebitoGeral = 0, totalCreditoGeral = 0;
+        int linha = 0;
+        foreach (var c in centros)
+        {
+            (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt + 2);
+            gfx.DrawRectangle(XBrushes.DarkSlateBlue, X0, y, largTotal, linhaAlt + 2);
+            gfx.DrawString($"CENTRO {c.Centro:D4} - {c.CentroNome}   ({c.Empregados} funcionários)",
+                fonteBold, XBrushes.White, new XRect(X0 + 4, y, largTotal - 4, linhaAlt + 2), XStringFormats.CenterLeft);
+            y += linhaAlt + 2;
+
+            DrawHeader(y);
+            y += linhaAlt;
+            foreach (var a in c.Contas)
+            {
+                (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+                if (y == 30) { DrawHeader(y); y += linhaAlt; }
+                var zebra = linha % 2 == 0 ? XBrushes.White : XBrushes.AliceBlue;
+                float xx = X0;
+                gfx.DrawRectangle(zebra, xx, y, colPlano, linhaAlt);
+                gfx.DrawString(a.Plano, fonte, XBrushes.Black, new XRect(xx + 2, y, colPlano - 4, linhaAlt), XStringFormats.Center);
+                xx += colPlano;
+                gfx.DrawRectangle(zebra, xx, y, colDesc, linhaAlt);
+                gfx.DrawString($"{a.CodigoVerba:D4} - {a.Descricao}", fonte, XBrushes.Black, new XRect(xx + 2, y, colDesc - 4, linhaAlt), XStringFormats.TopLeft);
+                xx += colDesc;
+                gfx.DrawRectangle(zebra, xx, y, colDeb, linhaAlt);
+                gfx.DrawString(VerbaFinanceira.FormatarValor(a.Debito), fonte, XBrushes.Black, new XRect(xx + 2, y, colDeb - 4, linhaAlt), XStringFormats.CenterRight);
+                xx += colDeb;
+                gfx.DrawRectangle(zebra, xx, y, colCred, linhaAlt);
+                gfx.DrawString(VerbaFinanceira.FormatarValor(a.Credito), fonte, XBrushes.Black, new XRect(xx + 2, y, colCred - 4, linhaAlt), XStringFormats.CenterRight);
+                xx += colCred;
+                gfx.DrawRectangle(zebra, xx, y, colSaldo, linhaAlt);
+                gfx.DrawString(VerbaFinanceira.FormatarValor(a.Saldo), fonteBold, XBrushes.Black, new XRect(xx + 2, y, colSaldo - 4, linhaAlt), XStringFormats.CenterRight);
+                y += linhaAlt;
+                linha++;
+            }
+            // subtotal do centro
+            (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+            float xs = X0;
+            gfx.DrawRectangle(XBrushes.SteelBlue, xs, y, colPlano + colDesc, linhaAlt);
+            gfx.DrawString($"SUBTOTAL {c.Centro:D4}", fonteBold, XBrushes.White, new XRect(xs + 2, y, colPlano + colDesc - 4, linhaAlt), XStringFormats.CenterLeft);
+            xs += colPlano + colDesc;
+            gfx.DrawRectangle(XBrushes.SteelBlue, xs, y, colDeb, linhaAlt);
+            gfx.DrawString(VerbaFinanceira.FormatarValor(c.TotalDebito), fonteBold, XBrushes.White, new XRect(xs + 2, y, colDeb - 4, linhaAlt), XStringFormats.CenterRight);
+            xs += colDeb;
+            gfx.DrawRectangle(XBrushes.SteelBlue, xs, y, colCred, linhaAlt);
+            gfx.DrawString(VerbaFinanceira.FormatarValor(c.TotalCredito), fonteBold, XBrushes.White, new XRect(xs + 2, y, colCred - 4, linhaAlt), XStringFormats.CenterRight);
+            xs += colCred;
+            gfx.DrawRectangle(XBrushes.SteelBlue, xs, y, colSaldo, linhaAlt);
+            gfx.DrawString(VerbaFinanceira.FormatarValor(c.TotalDebito - c.TotalCredito), fonteBold, XBrushes.White, new XRect(xs + 2, y, colSaldo - 4, linhaAlt), XStringFormats.CenterRight);
+            y += linhaAlt;
+            totalDebitoGeral += c.TotalDebito;
+            totalCreditoGeral += c.TotalCredito;
+            y += 10;
+        }
+
+        // total geral
+        (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+        float xg = X0;
+        gfx.DrawRectangle(XBrushes.Black, xg, y, colPlano + colDesc, linhaAlt);
+        gfx.DrawString($"TOTAL GERAL ({centros.Count} centros)", fonteBold, XBrushes.White, new XRect(xg + 2, y, colPlano + colDesc - 4, linhaAlt), XStringFormats.CenterLeft);
+        xg += colPlano + colDesc;
+        gfx.DrawRectangle(XBrushes.Black, xg, y, colDeb, linhaAlt);
+        gfx.DrawString(VerbaFinanceira.FormatarValor(totalDebitoGeral), fonteBold, XBrushes.White, new XRect(xg + 2, y, colDeb - 4, linhaAlt), XStringFormats.CenterRight);
+        xg += colDeb;
+        gfx.DrawRectangle(XBrushes.Black, xg, y, colCred, linhaAlt);
+        gfx.DrawString(VerbaFinanceira.FormatarValor(totalCreditoGeral), fonteBold, XBrushes.White, new XRect(xg + 2, y, colCred - 4, linhaAlt), XStringFormats.CenterRight);
+        xg += colCred;
+        gfx.DrawRectangle(XBrushes.Black, xg, y, colSaldo, linhaAlt);
+        gfx.DrawString(VerbaFinanceira.FormatarValor(totalDebitoGeral - totalCreditoGeral), fonteBold, XBrushes.White, new XRect(xg + 2, y, colSaldo - 4, linhaAlt), XStringFormats.CenterRight);
+
+        gfx.Dispose();
+        doc.Save(caminho);
+    }
+
+    private static void DrawFuncHeader(XGraphics gfx, float y, XFont fonteCab, float linhaAlt)
+    {
+        gfx.DrawRectangle(XBrushes.SteelBlue, X0, y, ColsFunc.Sum(), linhaAlt);
+        float x = X0;
+        for (int i = 0; i < HeadersFunc.Length; i++)
+        {
+            var alinh = i >= 3 ? XStringFormats.CenterRight : XStringFormats.Center;
+            gfx.DrawString(HeadersFunc[i], fonteCab, XBrushes.White,
+                new XRect(x + 2, y, ColsFunc[i] - 4, linhaAlt), alinh);
+            x += ColsFunc[i];
+        }
+    }
 }
