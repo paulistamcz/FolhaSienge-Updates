@@ -21,7 +21,12 @@ public partial class Form1 : Form
         CarregarVerbas();
         CarregarTiposFolha();
         CarregarTiposGuias();
-        Text = $"Importação Folha de Pagamento - Sienge (ENGEMAT)  v{Atualizador.VersaoAtual}";
+        Text = $"Plus Informática - Importação Folha de Pagamento Sienge  v{Atualizador.VersaoAtual}";
+    }
+
+    private void btnSair_Click(object sender, EventArgs e)
+    {
+        Application.Exit();
     }
 
     private void CarregarTiposGuias()

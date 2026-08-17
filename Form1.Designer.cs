@@ -95,6 +95,8 @@ partial class Form1
     private TabPage tabFolha;
     private TabPage tabGuias;
 
+    private Button btnSair;
+
     private void InitializeComponent()
     {
         this.grpBanco = new GroupBox();
@@ -172,6 +174,7 @@ partial class Form1
         this.tabGrf = new TabPage();
         this.tabFolha = new TabPage();
         this.tabGuias = new TabPage();
+        this.btnSair = new Button();
         this.grpBanco.SuspendLayout();
         this.grpDados.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)(this.dgvCentros)).BeginInit();
@@ -995,6 +998,7 @@ partial class Form1
         this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
         this.AutoScaleMode = AutoScaleMode.Font;
         this.ClientSize = new System.Drawing.Size(984, 1050);
+        this.Controls.Add(this.btnSair);
         this.Controls.Add(this.tabExport);
         this.Controls.Add(this.grpCsv);
         this.Controls.Add(this.grpDados);
@@ -1002,7 +1006,18 @@ partial class Form1
         this.Name = "Form1";
         this.StartPosition = FormStartPosition.CenterScreen;
         this.MinimumSize = new System.Drawing.Size(984, 900);
-        this.Text = "Importação Folha de Pagamento - Sienge (ENGEMAT)";
+        this.Text = "Plus Informática - Importação Folha de Pagamento Sienge";
+        // 
+        // btnSair
+        // 
+        this.btnSair.Anchor = ((AnchorStyles)((AnchorStyles.Top | AnchorStyles.Right)));
+        this.btnSair.Location = new System.Drawing.Point(880, 12);
+        this.btnSair.Name = "btnSair";
+        this.btnSair.Size = new System.Drawing.Size(90, 30);
+        this.btnSair.TabIndex = 50;
+        this.btnSair.Text = "Sair";
+        this.btnSair.UseVisualStyleBackColor = true;
+        this.btnSair.Click += new EventHandler(this.btnSair_Click);
         this.grpBanco.ResumeLayout(false);
         this.grpDados.ResumeLayout(false);
         this.grpDados.PerformLayout();

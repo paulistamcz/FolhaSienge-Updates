@@ -116,6 +116,7 @@ public static class RelatorioPdf
             DrawDetalheTotal(gfx, detalhe.Count, totalDetalhe, y, fonteBold);
         }
 
+        DrawRodape(gfx, page, y);
         gfx.Dispose();
         doc.Save(caminho);
     }
@@ -468,6 +469,39 @@ public static class RelatorioPdf
             x += ColsFunc[c];
         }
 
+        // ===== DETALHAMENTO EXPLICADO DO TOTAL DO CENTRO =====
+        y += linhaAlt + 16;
+        (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, 180);
+        // fundo destacado do bloco (cobre título + 8 linhas)
+        gfx.DrawRectangle(XBrushes.Ivory, X0 - 6, y - 4, 776, 170);
+        gfx.DrawRectangle(XBrushes.SteelBlue, X0 - 6, y - 4, 776, 2);
+        gfx.DrawString("DETALHAMENTO DO TOTAL DO CENTRO", fonteCab, XBrushes.SteelBlue, new XPoint(X0, y));
+        y += 16;
+
+        void LinhaDetalhe(string txt, decimal val, bool bold)
+        {
+            (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt + 2);
+            gfx.DrawString("   " + txt, bold ? fonteBold : fonte, XBrushes.Black, new XRect(X0, y - 8, 560, linhaAlt + 2), XStringFormats.TopLeft);
+            gfx.DrawString(VerbaFinanceira.FormatarValor(val), bold ? fonteBold : fonte, XBrushes.Black, new XRect(X0 + 560 + 8, y - 8, 200 - 8, linhaAlt + 2), XStringFormats.TopRight);
+            y += linhaAlt;
+        }
+
+        decimal liqTotal = funcionarios.Sum(f => f.Liquido);
+        decimal provTotal = funcionarios.Sum(f => f.TotalProventos);
+        decimal descTotal = funcionarios.Sum(f => f.TotalDescontos);
+        decimal encTotal = funcionarios.Sum(f => f.Fgts + f.Inss + f.Irrf);
+        decimal empTotal = funcionarios.Sum(f => f.TotalEmprestimos);
+
+        LinhaDetalhe($"Líquido pago aos {funcionarios.Count} funcionários", liqTotal, true);
+        LinhaDetalhe("  (+) Proventos totais da folha", provTotal, false);
+        LinhaDetalhe("  (-) Descontos totais da folha", -descTotal, false);
+        LinhaDetalhe("  (=) Líquido (proventos - descontos)", provTotal - descTotal, true);
+        LinhaDetalhe("  (+) Encargos da empresa (FGTS + INSS + IRRF)", encTotal, false);
+        LinhaDetalhe("  Empréstimos consignados (valor dos contratos)", empTotal, false);
+        LinhaDetalhe("", 0, false);
+        LinhaDetalhe("CUSTO TOTAL DO CENTRO (liquidado + encargos)", liqTotal + encTotal, true);
+
+        DrawRodape(gfx, page, y);
         gfx.Dispose();
         doc.Save(caminho);
     }
@@ -489,7 +523,7 @@ public static class RelatorioPdf
         var fonte = new XFont("Arial", 8, XFontStyleEx.Regular);
         var fonteBold = new XFont("Arial", 8, XFontStyleEx.Bold);
         const float linhaAlt = 18;
-        float colC = 50, colNome = 250, colEmp = 70, colVerba = 340, colVal = 90;
+        float colC = 50, colNome = 250, colEmp = 70, colVerba = 320, colVal = 92;
         float largTotal = colC + colNome + colEmp + colVerba + colVal;
 
         float y = 28;
@@ -575,6 +609,7 @@ public static class RelatorioPdf
         gfx.DrawRectangle(XBrushes.DarkSlateBlue, xg, y, colVal, linhaAlt);
         gfx.DrawString(VerbaFinanceira.FormatarValor(totalGeral), fonteBold, XBrushes.White, new XRect(xg + 2, y, colVal - 4, linhaAlt), XStringFormats.CenterRight);
 
+        DrawRodape(gfx, page, y);
         gfx.Dispose();
         doc.Save(caminho);
     }
@@ -656,6 +691,7 @@ public static class RelatorioPdf
         gfx.DrawString($"TOTAL GERAL ({centros.Count} centros)", fonteBold, XBrushes.White, new XRect(X0 + 4, y, colDesc - 4, linhaAlt), XStringFormats.CenterLeft);
         gfx.DrawString(VerbaFinanceira.FormatarValor(totalGeral), fonteBold, XBrushes.White, new XRect(X0 + colDesc + 8, y, colVal - 8, linhaAlt), XStringFormats.CenterRight);
 
+        DrawRodape(gfx, page, y);
         gfx.Dispose();
         doc.Save(caminho);
     }
@@ -678,7 +714,7 @@ public static class RelatorioPdf
         var fonte = new XFont("Arial", 8, XFontStyleEx.Regular);
         var fonteBold = new XFont("Arial", 8, XFontStyleEx.Bold);
         const float linhaAlt = 18;
-        float colPlano = 90, colDesc = 560, colDeb = 90, colCred = 90, colSaldo = 92;
+        float colPlano = 80, colDesc = 420, colDeb = 94, colCred = 94, colSaldo = 94;
         float largTotal = colPlano + colDesc + colDeb + colCred + colSaldo;
 
         float y = 26;
@@ -775,6 +811,43 @@ public static class RelatorioPdf
         gfx.DrawRectangle(XBrushes.Black, xg, y, colSaldo, linhaAlt);
         gfx.DrawString(VerbaFinanceira.FormatarValor(totalDebitoGeral - totalCreditoGeral), fonteBold, XBrushes.White, new XRect(xg + 2, y, colSaldo - 4, linhaAlt), XStringFormats.CenterRight);
 
+        // ===== DETALHAMENTO EXPLICADO DO TOTAL GERAL =====
+        y += linhaAlt + 12;
+        (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+        gfx.DrawString("DETALHAMENTO DO TOTAL GERAL", fonteCab, XBrushes.SteelBlue, new XPoint(X0, y));
+        y += 14;
+
+        decimal SaldoVerba(int cod, string plano) =>
+            centros.Sum(c => c.Contas.Where(a => a.CodigoVerba == cod && a.Plano == plano)
+                .Sum(a => a.Debito - a.Credito));
+
+        void LinhaDetalhe(string txt, decimal val, bool bold)
+        {
+            (gfx, page, y) = GarantirEspaco(gfx, doc, page, y, linhaAlt);
+            gfx.DrawString("   " + txt, bold ? fonteBold : fonte, XBrushes.Black, new XRect(X0, y - 8, 560, linhaAlt), XStringFormats.TopLeft);
+            gfx.DrawString(VerbaFinanceira.FormatarValor(val), bold ? fonteBold : fonte, XBrushes.Black, new XRect(X0 + 560 + 8, y - 8, 200 - 8, linhaAlt), XStringFormats.TopRight);
+            y += linhaAlt;
+        }
+
+        decimal sSal = SaldoVerba(1, "2.02.01.02");
+        decimal sFer = SaldoVerba(3, "2.01.02.02");
+        decimal sInss = SaldoVerba(2, "2.01.02.10");
+        decimal sFgts = SaldoVerba(58, "2.01.02.11");
+        decimal sIrrf = SaldoVerba(10, "2.01.02.16");
+        decimal sEmp = SaldoVerba(20, "2.02.02.25");
+        decimal resto = (totalDebitoGeral - totalCreditoGeral) - (sSal + sFer + sInss + sFgts + sIrrf + sEmp);
+
+        LinhaDetalhe($"Salário / líquido ({centros.Count} centros)", sSal, false);
+        LinhaDetalhe("  (+) Férias", sFer, false);
+        LinhaDetalhe("  (+) FGTS", sFgts, false);
+        LinhaDetalhe("  (-) INSS retido", sInss, false);
+        LinhaDetalhe("  (-) IRRF retido", sIrrf, false);
+        LinhaDetalhe("  (-) Empréstimos consignados", sEmp, false);
+        LinhaDetalhe("  (+) Demais contas/verbas", resto, false);
+        LinhaDetalhe("", 0, false);
+        LinhaDetalhe("TOTAL GERAL (débito - crédito)", totalDebitoGeral - totalCreditoGeral, true);
+
+        DrawRodape(gfx, page, y);
         gfx.Dispose();
         doc.Save(caminho);
     }
@@ -790,5 +863,20 @@ public static class RelatorioPdf
                 new XRect(x + 2, y, ColsFunc[i] - 4, linhaAlt), alinh);
             x += ColsFunc[i];
         }
+    }
+
+    /// <summary>
+    /// Desenha o rodapé de divulgação do desenvolvedor na última página do PDF.
+    /// </summary>
+    private static void DrawRodape(XGraphics gfx, PdfPage page, float y)
+    {
+        var fonte = new XFont("Arial", 8, XFontStyleEx.Regular);
+        var fonteBold = new XFont("Arial", 8, XFontStyleEx.Bold);
+        float rodapeY = (float)(page.Height.Point - 38);
+        gfx.DrawRectangle(XBrushes.SteelBlue, X0 - 6, rodapeY - 12, 800, 2);
+        gfx.DrawString("Desenvolvido por PLUS INFORMÁTICA - Tecnologia que resolve. Confiança que fica.",
+            fonteBold, XBrushes.SteelBlue, new XPoint(X0, rodapeY));
+        gfx.DrawString("Eduardo Aquino Silva  |  WhatsApp (82) 91593-591  |  plusinformaticamcz.com.br  |  webmaster@pluscont.com.br",
+            fonte, XBrushes.DarkGray, new XPoint(X0, rodapeY + 12));
     }
 }
