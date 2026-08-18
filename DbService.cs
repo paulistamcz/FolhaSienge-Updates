@@ -317,7 +317,7 @@ public class DbService
             var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
             // Observação: se informada (ex.: nome do credor), acrescenta o nome do centro por linha.
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.Nome : $"{observacao} - {l.Nome}";
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};\"{obra}\";\"{unidade}\";\"{itemOrcamento}\";\"{departamento}\";{competenciaDoc};{obs}");
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};=\"{obra}\";=\"{unidade}\";=\"{itemOrcamento}\";=\"{departamento}\";{competenciaDoc};{obs}");
             i++;
         }
         return sb.ToString();
@@ -372,7 +372,7 @@ public class DbService
             var cc = l.Centro.ToString("D4");
             var valor = l.Liquido.ToString("0.00", CultureInfo.InvariantCulture);
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.NomeEmpregado : observacao + " - " + l.NomeEmpregado;
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};\"{obra}\";\"{unidade}\";\"{itemOrcamento}\";\"{departamento}\";{competenciaDoc};{obs}");
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};=\"{obra}\";=\"{unidade}\";=\"{itemOrcamento}\";=\"{departamento}\";{competenciaDoc};{obs}");
         }
         return sb.ToString();
     }
