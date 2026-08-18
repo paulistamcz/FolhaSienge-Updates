@@ -396,7 +396,7 @@ partial class Form1
         this.grpCsv.Size = new System.Drawing.Size(960, 270);
         this.grpCsv.TabIndex = 2;
         this.grpCsv.TabStop = false;
-        this.grpCsv.Text = "3. Geração do arquivo CSV (layout Sienge)";
+        this.grpCsv.Text = "3. Geração do arquivo CSV (layout Folha de Pagamento)";
         // 
         // lblVencimento
         // 
@@ -1006,7 +1006,7 @@ partial class Form1
         this.Name = "Form1";
         this.StartPosition = FormStartPosition.CenterScreen;
         this.MinimumSize = new System.Drawing.Size(984, 900);
-        this.Text = "Plus Informática - Importação Folha de Pagamento Sienge";
+        this.Text = "Plus Informática - Folha de Pagamento (Plus Contabilidade)";
         // 
         // btnSair
         // 

@@ -21,7 +21,7 @@ public partial class Form1 : Form
         CarregarVerbas();
         CarregarTiposFolha();
         CarregarTiposGuias();
-        Text = $"Plus Informática - Importação Folha de Pagamento Sienge  v{Atualizador.VersaoAtual}";
+        Text = $"Plus Informática - Folha de Pagamento (Plus Contabilidade)  v{Atualizador.VersaoAtual}";
     }
 
     private void btnSair_Click(object sender, EventArgs e)
@@ -369,7 +369,7 @@ public partial class Form1 : Form
             txtObs.Text = v.Descricao;
             if (!string.IsNullOrWhiteSpace(v.CredorCodigo))
                 txtCredorCodigo.Text = v.CredorCodigo;
-            // Documento (K): não sobrescreve — o Sienge usa a competência quando vazio,
+            // Documento (K): não sobrescreve — o sistema usa a competência quando vazio,
             // e o usuário pode editar manualmente.
             AtualizarDocumento();
         }
@@ -391,7 +391,7 @@ public partial class Form1 : Form
     private void AtualizarDocumento()
     {
         // O documento (K) segue a competência selecionada (ex.: 06/2026 -> "062026").
-        // O Sienge usa a competência quando a coluna K está vazia, mas preenchemos
+        // O sistema usa a competência quando a coluna K está vazia, mas preenchemos
         // explicitamente para garantir consistência. O usuário pode editar manualmente depois.
         var comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
         if (!string.IsNullOrEmpty(comp))
@@ -528,7 +528,7 @@ public partial class Form1 : Form
         };
         if (sfd.ShowDialog() == DialogResult.OK)
         {
-            // latin-1 para evitar problemas de acento no Excel/Sienge
+            // latin-1 para evitar problemas de acento no Excel
             System.IO.File.WriteAllText(sfd.FileName, _csvGerado, System.Text.Encoding.GetEncoding(28591));
             MessageBox.Show("Arquivo salvo: " + sfd.FileName, "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -1051,7 +1051,7 @@ public partial class Form1 : Form
                 {
                     var cc = l.Centro.ToString("D4");
                     var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
-                    sb.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};{obra};{unidade};{itemOrc};{departamento};{doc};{l.NomeEmpregado}");
+                    sb.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};\"{obra}\";\"{unidade}\";\"{itemOrc}\";\"{departamento}\";{doc};{l.NomeEmpregado}");
                 }
                 _csvGeradoGuias = sb.ToString();
                 txtResultadoGuias.Text = _csvGeradoGuias;
@@ -1116,7 +1116,7 @@ public partial class Form1 : Form
                     var cc = l.Centro.ToString("D4");
                     var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
                     string nomeCentro = string.IsNullOrWhiteSpace(l.Nome) ? svc.NomeCentroCusto(_conn!, l.Centro) : l.Nome;
-                    sb2.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};{obra};{unidade};{itemOrc};{departamento};{doc};{nomeCentro}");
+                    sb2.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};\"{obra}\";\"{unidade}\";\"{itemOrc}\";\"{departamento}\";{doc};{nomeCentro}");
                     i++;
                 }
                 _csvGeradoGuias = sb2.ToString();

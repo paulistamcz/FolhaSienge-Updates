@@ -42,10 +42,10 @@ public static class RelatorioPdf
         var fonteBold = new XFont("Arial", 8, XFontStyleEx.Bold);
 
         float y = 30;
-        gfx.DrawString("RELATÓRIO MENSAL DE FOLHA DE PAGAMENTO - SIENGE (ENGEMAT)",
+        gfx.DrawString("RELATÓRIO MENSAL DE FOLHA DE PAGAMENTO - PLUS CONTABIL",
             fonteTitulo, XBrushes.Black, new XPoint(X0, y));
         y += 22;
-        gfx.DrawString($"Competência: {competencia}    Empresa: ENGEMAT    Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
+        gfx.DrawString($"Competência: {competencia}    Empresa: Plus Contabilidade    Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
             fonteSub, XBrushes.DarkGray, new XPoint(X0, y));
         y += 18;
 
@@ -393,7 +393,7 @@ public static class RelatorioPdf
         const float linhaAlt = 18;
 
         float y = 28;
-        gfx.DrawString("RELATÓRIO MENSAL POR FUNCIONÁRIO - CENTRO DE CUSTO - SIENGE (ENGEMAT)",
+        gfx.DrawString("RELATÓRIO MENSAL POR FUNCIONÁRIO - CENTRO DE CUSTO - PLUS CONTABIL",
             fonteTitulo, XBrushes.Black, new XPoint(X0, y));
         y += 18;
         gfx.DrawString($"Competência: {competencia}    Centro: {centroCodigo:D4} - {centroNome}    " +
@@ -527,10 +527,10 @@ public static class RelatorioPdf
         float largTotal = colC + colNome + colEmp + colVerba + colVal;
 
         float y = 28;
-        gfx.DrawString("RELATÓRIO POR CENTRO DE CUSTO - RESUMO POR VERBA - SIENGE (ENGEMAT)",
+        gfx.DrawString("RELATÓRIO POR CENTRO DE CUSTO - RESUMO POR VERBA - PLUS CONTABIL",
             fonteTitulo, XBrushes.Black, new XPoint(X0, y));
         y += 18;
-        gfx.DrawString($"Competência: {competencia}    Empresa: ENGEMAT    " +
+        gfx.DrawString($"Competência: {competencia}    Empresa: Plus Contabilidade    " +
                        $"Centros: {centros.Count}    Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
             fonteSub, XBrushes.DarkGray, new XPoint(X0, y));
         y += 14;
@@ -635,10 +635,10 @@ public static class RelatorioPdf
         float colVal = 162;
 
         float y = 26;
-        gfx.DrawString("FOLHA DE PAGAMENTO POR CENTRO DE CUSTO - RESUMO CONTÁBIL - SIENGE (ENGEMAT)",
+        gfx.DrawString("FOLHA DE PAGAMENTO POR CENTRO DE CUSTO - RESUMO CONTÁBIL - PLUS CONTABIL",
             fonteTitulo, XBrushes.Black, new XPoint(X0, y));
         y += 18;
-        gfx.DrawString($"Competência: {competencia}    Empresa: ENGEMAT    Centros: {centros.Count}    " +
+        gfx.DrawString($"Competência: {competencia}    Empresa: Plus Contabilidade    Centros: {centros.Count}    " +
                        $"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
             fonteSub, XBrushes.DarkGray, new XPoint(X0, y));
         y += 14;
@@ -718,10 +718,10 @@ public static class RelatorioPdf
         float largTotal = colPlano + colDesc + colDeb + colCred + colSaldo;
 
         float y = 26;
-        gfx.DrawString("RAZÃO CONTÁBIL DA FOLHA POR CENTRO DE CUSTO - SIENGE (ENGEMAT)",
+        gfx.DrawString("RAZÃO CONTÁBIL DA FOLHA POR CENTRO DE CUSTO - PLUS CONTABIL",
             fonteTitulo, XBrushes.Black, new XPoint(X0, y));
         y += 18;
-        gfx.DrawString($"Competência: {competencia}    Empresa: ENGEMAT    Centros: {centros.Count}    " +
+        gfx.DrawString($"Competência: {competencia}    Empresa: Plus Contabilidade    Centros: {centros.Count}    " +
                        $"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}",
             fonteSub, XBrushes.DarkGray, new XPoint(X0, y));
         y += 14;
