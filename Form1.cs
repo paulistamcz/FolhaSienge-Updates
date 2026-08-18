@@ -390,12 +390,10 @@ public partial class Form1 : Form
 
     private void AtualizarDocumento()
     {
-        // O documento (K) segue a competência selecionada (ex.: 06/2026 -> "062026").
-        // O sistema usa a competência quando a coluna K está vazia, mas preenchemos
-        // explicitamente para garantir consistência. O usuário pode editar manualmente depois.
+        // O documento (K) segue o formato: ddMM/competência (ex.: 18/08 + 06/2026 -> "1808/062026").
         var comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
         if (!string.IsNullOrEmpty(comp))
-            txtDoc.Text = comp.Replace("/", "");
+            txtDoc.Text = DateTime.Now.ToString("ddMM") + "/" + comp.Replace("/", "");
     }
 
     private void btnCarregarCentros_Click(object sender, EventArgs e)
