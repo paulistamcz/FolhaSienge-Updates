@@ -542,10 +542,13 @@ public partial class Form1 : Form
         }
         string comp = cmbCompetencia.SelectedItem.ToString()!;
         Cursor = Cursors.WaitCursor;
+        Logger.Limpar();
+        Logger.Log($"Início geração relatório - competência: {comp}");
         try
         {
             var svc = new DbService();
             var selecionados = CentrosSelecionadosNaSecao2();
+            Logger.Log($"Centros selecionados: {selecionados.Count}");
 
             using var sfd = new SaveFileDialog
             {
@@ -554,18 +557,36 @@ public partial class Form1 : Form
             };
             if (sfd.ShowDialog() == DialogResult.OK)
             {
-                // Quando exatamente 1 centro está selecionado, gera o relatório detalhado por funcionário.
+                Logger.Log($"Arquivo saída: {sfd.FileName}");
                 if (selecionados.Count == 1)
                 {
                     int centro = selecionados.First();
+                    Logger.Log($"Centro: {centro}");
                     string centroNome = svc.NomeCentroCusto(_conn!, centro);
+                    Logger.Log($"Nome centro: {centroNome}");
                     var funcionarios = svc.DetalhamentoPorFuncionario(_conn!, comp, centro);
-                    RelatorioPdf.GerarDetalhado(sfd.FileName, comp, centro, centroNome, funcionarios);
+                    Logger.Log($"Funcionários: {funcionarios.Count}");
+                    var rubricas = svc.ResumoPorRubrica(_conn!, comp, centro);
+                    Logger.Log($"Rubricas: {rubricas.Count}");
+                    var bases = svc.ObterResumoBases(_conn!, comp, centro);
+                    Logger.Log($"Bases - Emp: {bases.NumEmpregados}, Liq: {bases.Liquido}, Prov: {bases.Proventos}, Desc: {bases.Descontos}");
+                    Logger.Log($"Bases - INSS: {bases.TotalInss}, BaseINSS: {bases.SalarioContribEmpregados}, BaseIRRf: {bases.BaseIrrfMensal}, IRRF: {bases.ValorIrrfMensal}");
+                    Logger.Log($"Bases - FGTS: {bases.ValorFgts}, BaseFgts: {bases.BaseFgts}");
+                    if (funcionarios.Count > 0)
+                    {
+                        var f0 = funcionarios[0];
+                        Logger.Log($"[DEBUG] Func1: {f0.Nome}, Salario: {f0.Salario}, Prov: {f0.TotalProventos}, Desc: {f0.TotalDescontos}, Liq: {f0.Liquido}, Linhas: {f0.Linhas.Count}");
+                        if (f0.Linhas.Count > 0)
+                            foreach (var l in f0.Linhas.Take(5))
+                                Logger.Log($"  Evento: {l.CodigoEvento} {l.NomeEvento} [{l.ProvDesc}] {l.Valor}");
+                    }
+                    Logger.Log("Gerando PDF...");
+                    RelatorioPdf.GerarDetalhado(sfd.FileName, comp, centro, centroNome, funcionarios, rubricas, bases);
+                    Logger.Log("PDF gerado com sucesso!");
                 }
                 else
                 {
-                    // Quando "todos" (nenhum ou vários centros), gera a razão contábil por centro
-                    // (débito/crédito por conta do plano financeiro) para fechamento de balanço.
+                    Logger.Log("Modo razão contábil...");
                     var razao = svc.ResumoRazaoContabil(_conn!, comp);
                     RelatorioPdf.GerarRazaoContabil(sfd.FileName, comp, razao);
                 }
@@ -575,8 +596,9 @@ public partial class Form1 : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Erro ao gerar relatório: " + ex.Message, "Erro",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Logger.LogErro("btnRelatorioMensal_Click", ex);
+            MessageBox.Show("Erro ao gerar relatório: " + ex.Message + "\n\nLog: " + Logger.ObterLog(),
+                "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {

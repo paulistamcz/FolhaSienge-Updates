@@ -1075,100 +1075,303 @@ public class DbService
         return centro.ToString();
     }
 
-    /// <summary>Detalhamento completo de um funcionário para o relatório por centro.</summary>
+    /// <summary>Detalhamento completo de um funcionário para o relatório por centro (layout Extrato Mensal Sienge).</summary>
     public class FuncionarioDetalhe
     {
         public int Empregado { get; set; }
         public string Nome { get; set; } = "";
         public int Centro { get; set; }
         public decimal Liquido { get; set; }
-        public List<(string Nome, string ProvDesc, decimal Valor)> Proventos { get; set; } = new();
-        public List<(string Nome, string ProvDesc, decimal Valor)> Descontos { get; set; } = new();
+        // dados cadastrais
+        public string Vinculo { get; set; } = "";
+        public string Cargo { get; set; } = "";
+        public string Situacao { get; set; } = "";
+        public string Cbo { get; set; } = "";
+        public string Cpf { get; set; } = "";
+        public int Departamento { get; set; }
+        public int Filial { get; set; }
+        public DateTime DataAdmissao { get; set; }
+        public decimal HorasMes { get; set; }
+        public decimal Salario { get; set; }
+        public int Nd { get; set; }
+        // proventos e descontos detalhados
+        public List<LinhaEvento> Linhas { get; set; } = new();
         public decimal TotalProventos { get; set; }
         public decimal TotalDescontos { get; set; }
+        // bases
+        public decimal BaseInss { get; set; }
+        public decimal ExcedenteInss { get; set; }
+        public decimal BaseFgts { get; set; }
+        public decimal ValorFgts { get; set; }
+        public decimal BaseIrrf { get; set; }
+        // emprestimos
         public List<(string Descricao, decimal Valor, int Parcelas, string Contrato)> Emprestimos { get; set; } = new();
         public decimal TotalEmprestimos { get; set; }
+        // encargos por evento
         public decimal Fgts { get; set; }
         public decimal Inss { get; set; }
         public decimal Irrf { get; set; }
     }
 
+    /// <summary>Uma linha de evento (provento/desconto/encargo) no extrato mensal.</summary>
+    public class LinhaEvento
+    {
+        public int CodigoEvento { get; set; }
+        public string NomeEvento { get; set; } = "";
+        public string ProvDesc { get; set; } = "";
+        public decimal Horas { get; set; }
+        public decimal Valor { get; set; }
+    }
+
+    /// <summary>Resumo por rubrica (consolidado de todas as verbas do centro).</summary>
+    public class RubricaResumo
+    {
+        public int CodigoEvento { get; set; }
+        public string NomeEvento { get; set; } = "";
+        public string ProvDesc { get; set; } = "";
+        public decimal Horas { get; set; }
+        public decimal Valor { get; set; }
+    }
+
+    /// <summary>Resumo das bases tributárias e situações do centro.</summary>
+    public class ResumoBases
+    {
+        public int NumEmpregados { get; set; }
+        public int NumEstagiarios { get; set; }
+        public int Trabalhando { get; set; }
+        public int Demitido { get; set; }
+        public int Afastado { get; set; }
+        public int Admissoes { get; set; }
+        public decimal SalarioContribEmpregados { get; set; }
+        public decimal SalarioContribContribuintes { get; set; }
+        public decimal BaseTotalInss { get; set; }
+        public decimal TotalInss { get; set; }
+        public decimal BaseIrrfMensal { get; set; }
+        public decimal ValorIrrfMensal { get; set; }
+        public decimal BaseFgts { get; set; }
+        public decimal ValorFgts { get; set; }
+        public decimal BaseFgtsAprendiz { get; set; }
+        public decimal ValorFgtsAprendiz { get; set; }
+        public decimal Proventos { get; set; }
+        public decimal Descontos { get; set; }
+        public decimal Liquido { get; set; }
+    }
+
     /// <summary>
-    /// Monta o detalhamento completo por funcionário de um centro (ou de todos se centro &lt;= 0),
-    /// na competência. Proventos/Descontos/FGTS/INSS/IRRF vêm de fomovto; empréstimos de FOEMPRESTIMOS_CONSIGNADOS.
+    /// Monta o detalhamento completo por funcionário de um centro no layout do Extrato Mensal Sienge.
+    /// Dados cadastrais de foempregados; eventos de fomovto (cada linha); empréstimos de FOEMPRESTIMOS_CONSIGNADOS.
     /// </summary>
     public List<FuncionarioDetalhe> DetalhamentoPorFuncionario(OdbcConnection conn, string comp, int centro = -1)
     {
         var sql = CompetenciaParaSql(comp);
         var lista = new List<FuncionarioDetalhe>();
 
-        // funcionários com líquido na competência
-        var sqlFunc = "SELECT e.i_empregados, TRIM(e.nome), e.i_ccustos, ROUND(f.liquido,2) " +
-            "FROM bethadba.foliquidosfilepr f " +
-            "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
-            "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 AND ROUND(f.liquido,2) > 0";
-        if (centro > 0) sqlFunc += " AND e.i_ccustos = ?";
-        sqlFunc += " ORDER BY e.nome";
-
-        using (var cmd = new OdbcCommand(sqlFunc, conn))
+        // Tenta buscar dados cadastrais expandidos; se der erro (coluna não existe), usa a query básica
+        bool temDadosCadastrais = false;
+        try
         {
-            cmd.Parameters.AddWithValue("c", sql);
-            if (centro > 0) cmd.Parameters.AddWithValue("cc", centro);
-            using var rd = cmd.ExecuteReader();
-            while (rd.Read())
+            var sqlFunc = "SELECT e.i_empregados, TRIM(e.nome), e.i_ccustos, ROUND(f.liquido,2), " +
+                "e.i_vinculos, e.i_cargos, e.situacao, e.cpf, e.i_departamentos, e.i_filiais, " +
+                "e.data_admissao, e.horas_mes, e.salario, e.nd " +
+                "FROM bethadba.foliquidosfilepr f " +
+                "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
+                "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
+                "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 AND ROUND(f.liquido,2) > 0";
+            if (centro > 0) sqlFunc += " AND e.i_ccustos = ?";
+            sqlFunc += " ORDER BY e.nome";
+
+            using (var cmd = new OdbcCommand(sqlFunc, conn))
             {
-                lista.Add(new FuncionarioDetalhe
+                cmd.Parameters.AddWithValue("c", sql);
+                if (centro > 0) cmd.Parameters.AddWithValue("cc", centro);
+                using var rd = cmd.ExecuteReader();
+                while (rd.Read())
                 {
-                    Empregado = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]),
-                    Nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!,
-                    Centro = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]),
-                    Liquido = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]),
-                });
+                    lista.Add(new FuncionarioDetalhe
+                    {
+                        Empregado = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]),
+                        Nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!,
+                        Centro = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]),
+                        Liquido = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]),
+                        Vinculo = rd.IsDBNull(4) ? "" : Convert.ToString(rd[4])!,
+                        Cargo = rd.IsDBNull(5) ? "" : Convert.ToString(rd[5])!,
+                        Situacao = rd.IsDBNull(6) ? "" : Convert.ToString(rd[6])!,
+                        Cpf = rd.IsDBNull(7) ? "" : Convert.ToString(rd[7])!,
+                        Departamento = rd.IsDBNull(8) ? 0 : Convert.ToInt32(rd[8]),
+                        Filial = rd.IsDBNull(9) ? 0 : Convert.ToInt32(rd[9]),
+                        DataAdmissao = rd.IsDBNull(10) ? DateTime.MinValue : Convert.ToDateTime(rd[10]),
+                        HorasMes = rd.IsDBNull(11) ? 0m : Convert.ToDecimal(rd[11]),
+                        Salario = rd.IsDBNull(12) ? 0m : Convert.ToDecimal(rd[12]),
+                        Nd = rd.IsDBNull(13) ? 0 : Convert.ToInt32(rd[13]),
+                    });
+                }
+            }
+            temDadosCadastrais = lista.Count > 0;
+        }
+        catch
+        {
+            lista.Clear();
+        }
+
+        // Fallback: query básica se a expandida falhou
+        if (!temDadosCadastrais)
+        {
+            var sqlFunc2 = "SELECT e.i_empregados, TRIM(e.nome), e.i_ccustos, ROUND(f.liquido,2) " +
+                "FROM bethadba.foliquidosfilepr f " +
+                "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
+                "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
+                "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 AND ROUND(f.liquido,2) > 0";
+            if (centro > 0) sqlFunc2 += " AND e.i_ccustos = ?";
+            sqlFunc2 += " ORDER BY e.nome";
+
+            using (var cmd = new OdbcCommand(sqlFunc2, conn))
+            {
+                cmd.Parameters.AddWithValue("c", sql);
+                if (centro > 0) cmd.Parameters.AddWithValue("cc", centro);
+                using var rd = cmd.ExecuteReader();
+                while (rd.Read())
+                {
+                    lista.Add(new FuncionarioDetalhe
+                    {
+                        Empregado = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]),
+                        Nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!,
+                        Centro = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]),
+                        Liquido = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]),
+                    });
+                }
             }
         }
 
         foreach (var f in lista)
         {
-            // movimentos por evento
-            using var cmd = new OdbcCommand(
-                "SELECT e.nome, m.prov_desc, ROUND(SUM(m.valor_cal),2) " +
-                "FROM bethadba.fomovto m " +
-                "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
-                "WHERE m.codi_emp = 1 AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
-                "AND m.tipo_proces = 11 " +
-                "GROUP BY e.nome, m.prov_desc ORDER BY m.prov_desc, e.nome", conn);
-            cmd.Parameters.AddWithValue("emp", f.Empregado);
-            cmd.Parameters.AddWithValue("ini", sql);
-            cmd.Parameters.AddWithValue("fim", sql);
-            using (var rd = cmd.ExecuteReader())
+            // cada linha de evento (provento/desconto/encargo) com código, horas e valor
+            try
             {
-                while (rd.Read())
+                using var cmd = new OdbcCommand(
+                    "SELECT m.i_eventos, e.nome, m.prov_desc, ROUND(COALESCE(m.horas,0),2), ROUND(SUM(m.valor_cal),2) " +
+                    "FROM bethadba.fomovto m " +
+                    "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
+                    "WHERE m.codi_emp = 1 AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "AND m.tipo_proces = 11 " +
+                    "GROUP BY m.i_eventos, e.nome, m.prov_desc, m.horas " +
+                    "ORDER BY m.prov_desc, m.i_eventos", conn);
+                cmd.Parameters.AddWithValue("emp", f.Empregado);
+                cmd.Parameters.AddWithValue("ini", sql);
+                cmd.Parameters.AddWithValue("fim", sql);
+                using (var rd = cmd.ExecuteReader())
                 {
-                    string evento = rd.IsDBNull(0) ? "" : Convert.ToString(rd[0])!;
-                    string prov = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
-                    decimal val = rd.IsDBNull(2) ? 0m : Convert.ToDecimal(rd[2]);
-                    if (prov == "P")
+                    while (rd.Read())
                     {
-                        f.Proventos.Add((evento, prov, val));
-                        f.TotalProventos += val;
-                    }
-                    else if (prov == "D")
-                    {
-                        f.Descontos.Add((evento, prov, val));
-                        f.TotalDescontos += val;
-                    }
-                    else if (prov == "I")
-                    {
-                        // encargos/guias por funcionário
-                        if (evento.Contains("F.G.T.S", StringComparison.OrdinalIgnoreCase) || evento.Contains("FGTS", StringComparison.OrdinalIgnoreCase))
-                            f.Fgts += val;
-                        else if (evento.Contains("I.N.S.S", StringComparison.OrdinalIgnoreCase))
-                            f.Inss += val;
-                        else if (evento.Contains("IMPOSTO", StringComparison.OrdinalIgnoreCase) || evento.Contains("IRRF", StringComparison.OrdinalIgnoreCase))
-                            f.Irrf += val;
+                        int codEvt = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+                        string nomeEvt = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+                        string prov = rd.IsDBNull(2) ? "" : Convert.ToString(rd[2])!;
+                        decimal horas = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
+                        decimal val = rd.IsDBNull(4) ? 0m : Convert.ToDecimal(rd[4]);
+                        f.Linhas.Add(new LinhaEvento
+                        {
+                            CodigoEvento = codEvt,
+                            NomeEvento = nomeEvt,
+                            ProvDesc = prov,
+                            Horas = horas,
+                            Valor = val,
+                        });
+                        if (prov == "P") f.TotalProventos += val;
+                        else if (prov == "D") f.TotalDescontos += val;
+                        else if (prov == "I")
+                        {
+                            if (nomeEvt.Contains("F.G.T.S", StringComparison.OrdinalIgnoreCase) || nomeEvt.Contains("FGTS", StringComparison.OrdinalIgnoreCase))
+                                f.Fgts += val;
+                            else if (nomeEvt.Contains("I.N.S.S", StringComparison.OrdinalIgnoreCase))
+                                f.Inss += val;
+                            else if (nomeEvt.Contains("IMPOSTO", StringComparison.OrdinalIgnoreCase) || nomeEvt.Contains("IRRF", StringComparison.OrdinalIgnoreCase))
+                                f.Irrf += val;
+                        }
                     }
                 }
+            }
+            catch
+            {
+                // se a query com horas falhar, usa a sem horas
+                try
+                {
+                    using var cmd2 = new OdbcCommand(
+                        "SELECT m.i_eventos, e.nome, m.prov_desc, ROUND(SUM(m.valor_cal),2) " +
+                        "FROM bethadba.fomovto m " +
+                        "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
+                        "WHERE m.codi_emp = 1 AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                        "AND m.tipo_proces = 11 " +
+                        "GROUP BY m.i_eventos, e.nome, m.prov_desc " +
+                        "ORDER BY m.prov_desc, m.i_eventos", conn);
+                    cmd2.Parameters.AddWithValue("emp", f.Empregado);
+                    cmd2.Parameters.AddWithValue("ini", sql);
+                    cmd2.Parameters.AddWithValue("fim", sql);
+                    using (var rd2 = cmd2.ExecuteReader())
+                    {
+                        while (rd2.Read())
+                        {
+                            int codEvt = rd2.IsDBNull(0) ? 0 : Convert.ToInt32(rd2[0]);
+                            string nomeEvt = rd2.IsDBNull(1) ? "" : Convert.ToString(rd2[1])!;
+                            string prov = rd2.IsDBNull(2) ? "" : Convert.ToString(rd2[2])!;
+                            decimal val = rd2.IsDBNull(3) ? 0m : Convert.ToDecimal(rd2[3]);
+                            f.Linhas.Add(new LinhaEvento
+                            {
+                                CodigoEvento = codEvt,
+                                NomeEvento = nomeEvt,
+                                ProvDesc = prov,
+                                Horas = 0,
+                                Valor = val,
+                            });
+                            if (prov == "P") f.TotalProventos += val;
+                            else if (prov == "D") f.TotalDescontos += val;
+                            else if (prov == "I")
+                            {
+                                if (nomeEvt.Contains("FGTS", StringComparison.OrdinalIgnoreCase))
+                                    f.Fgts += val;
+                                else if (nomeEvt.Contains("I.N.S.S", StringComparison.OrdinalIgnoreCase))
+                                    f.Inss += val;
+                                else if (nomeEvt.Contains("IMPOSTO", StringComparison.OrdinalIgnoreCase) || nomeEvt.Contains("IRRF", StringComparison.OrdinalIgnoreCase))
+                                    f.Irrf += val;
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // bases por funcionário (Base INSS, Base FGTS, Base IRRF)
+            try
+            {
+                using var cmdBase = new OdbcCommand(
+                    "SELECT " +
+                    "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END),2), " +
+                    "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END),2), " +
+                    "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END),2) " +
+                    "FROM bethadba.fomovto m " +
+                    "WHERE m.codi_emp = 1 AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "AND m.tipo_proces = 11", conn);
+                cmdBase.Parameters.AddWithValue("emp", f.Empregado);
+                cmdBase.Parameters.AddWithValue("ini", sql);
+                cmdBase.Parameters.AddWithValue("fim", sql);
+                using (var rdBase = cmdBase.ExecuteReader())
+                {
+                    if (rdBase.Read())
+                    {
+                        f.BaseInss = rdBase.IsDBNull(0) ? 0m : Convert.ToDecimal(rdBase[0]);
+                        f.BaseFgts = rdBase.IsDBNull(1) ? 0m : Convert.ToDecimal(rdBase[1]);
+                        f.BaseIrrf = rdBase.IsDBNull(2) ? 0m : Convert.ToDecimal(rdBase[2]);
+                    }
+                }
+            }
+            catch { }
+
+            // Se salário veio zero, tenta pegar do maior provento (salário base)
+            if (f.Salario == 0m && f.Linhas.Count > 0)
+            {
+                var salarioEvt = f.Linhas
+                    .Where(l => l.ProvDesc == "P")
+                    .OrderByDescending(l => l.Valor)
+                    .FirstOrDefault();
+                if (salarioEvt != null) f.Salario = salarioEvt.Valor;
             }
 
             // empréstimos consignados
@@ -1191,6 +1394,263 @@ public class DbService
             }
         }
         return lista;
+    }
+
+    /// <summary>
+    /// Resumo por rubrica: total de horas e valor de cada evento no centro de custo.
+    /// </summary>
+    public List<RubricaResumo> ResumoPorRubrica(OdbcConnection conn, string comp, int centro)
+    {
+        var sql = CompetenciaParaSql(comp);
+        var lista = new List<RubricaResumo>();
+        try
+        {
+            using var cmd = new OdbcCommand(
+                "SELECT m.i_eventos, e.nome, m.prov_desc, " +
+                "ROUND(SUM(COALESCE(m.horas,0)),2), ROUND(SUM(m.valor_cal),2) " +
+                "FROM bethadba.fomovto m " +
+                "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
+                "LEFT JOIN bethadba.foempregados emp ON m.codi_emp = emp.codi_emp AND m.i_empregados = emp.i_empregados " +
+                "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                "AND m.tipo_proces = 11 AND emp.i_ccustos = ? " +
+                "GROUP BY m.i_eventos, e.nome, m.prov_desc " +
+                "ORDER BY m.prov_desc, m.i_eventos", conn);
+            cmd.Parameters.AddWithValue("ini", sql);
+            cmd.Parameters.AddWithValue("fim", sql);
+            cmd.Parameters.AddWithValue("cc", centro);
+            using var rd = cmd.ExecuteReader();
+            while (rd.Read())
+            {
+                lista.Add(new RubricaResumo
+                {
+                    CodigoEvento = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]),
+                    NomeEvento = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!,
+                    ProvDesc = rd.IsDBNull(2) ? "" : Convert.ToString(rd[2])!,
+                    Horas = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]),
+                    Valor = rd.IsDBNull(4) ? 0m : Convert.ToDecimal(rd[4]),
+                });
+            }
+        }
+        catch
+        {
+            // fallback sem horas
+            try
+            {
+                using var cmd2 = new OdbcCommand(
+                    "SELECT m.i_eventos, e.nome, m.prov_desc, ROUND(SUM(m.valor_cal),2) " +
+                    "FROM bethadba.fomovto m " +
+                    "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
+                    "LEFT JOIN bethadba.foempregados emp ON m.codi_emp = emp.codi_emp AND m.i_empregados = emp.i_empregados " +
+                    "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "AND m.tipo_proces = 11 AND emp.i_ccustos = ? " +
+                    "GROUP BY m.i_eventos, e.nome, m.prov_desc " +
+                    "ORDER BY m.prov_desc, m.i_eventos", conn);
+                cmd2.Parameters.AddWithValue("ini", sql);
+                cmd2.Parameters.AddWithValue("fim", sql);
+                cmd2.Parameters.AddWithValue("cc", centro);
+                using var rd2 = cmd2.ExecuteReader();
+                while (rd2.Read())
+                {
+                    lista.Add(new RubricaResumo
+                    {
+                        CodigoEvento = rd2.IsDBNull(0) ? 0 : Convert.ToInt32(rd2[0]),
+                        NomeEvento = rd2.IsDBNull(1) ? "" : Convert.ToString(rd2[1])!,
+                        ProvDesc = rd2.IsDBNull(2) ? "" : Convert.ToString(rd2[2])!,
+                        Horas = 0,
+                        Valor = rd2.IsDBNull(3) ? 0m : Convert.ToDecimal(rd2[3]),
+                    });
+                }
+            }
+            catch { }
+        }
+        return lista;
+    }
+
+    /// <summary>
+    /// Resumo das bases tributárias e situações do centro de custo.
+    /// </summary>
+    public ResumoBases ObterResumoBases(OdbcConnection conn, string comp, int centro)
+    {
+        var sql = CompetenciaParaSql(comp);
+        var rb = new ResumoBases();
+
+        // 1) totais do centro (empregados e líquido)
+        try
+        {
+            using var cmd = new OdbcCommand(
+                "SELECT COUNT(*), ROUND(SUM(f.liquido),2) " +
+                "FROM bethadba.foliquidosfilepr f " +
+                "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
+                "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
+                "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 AND e.i_ccustos = ?", conn);
+            cmd.Parameters.AddWithValue("c", sql);
+            cmd.Parameters.AddWithValue("cc", centro);
+            using var rd = cmd.ExecuteReader();
+            if (rd.Read())
+            {
+                rb.NumEmpregados = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+                rb.Liquido = rd.IsDBNull(1) ? 0m : Convert.ToDecimal(rd[1]);
+            }
+        }
+        catch { Logger.LogErro("ObterResumoBases.totais", new Exception("query totais")); }
+
+        // 2) proventos e descontos totais do centro (via fomovto)
+        try
+        {
+            using var cmd = new OdbcCommand(
+                "SELECT m.prov_desc, ROUND(SUM(m.valor_cal),2) " +
+                "FROM bethadba.fomovto m " +
+                "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
+                "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
+                "GROUP BY m.prov_desc", conn);
+            cmd.Parameters.AddWithValue("ini", sql);
+            cmd.Parameters.AddWithValue("fim", sql);
+            cmd.Parameters.AddWithValue("cc", centro);
+            using var rd = cmd.ExecuteReader();
+            while (rd.Read())
+            {
+                string pd = rd.IsDBNull(0) ? "" : Convert.ToString(rd[0])!;
+                decimal val = rd.IsDBNull(1) ? 0m : Convert.ToDecimal(rd[1]);
+                if (pd == "P") rb.Proventos += val;
+                else if (pd == "D") rb.Descontos += val;
+            }
+        }
+        catch { Logger.LogErro("ObterResumoBases.proventos", new Exception("query proventos")); }
+
+        // 3) INSS — tenta tabela foguiainss, senão calcula via fomovto
+        try
+        {
+            using var cmd = new OdbcCommand(
+                "SELECT ROUND(SUM(g.total_guia),2) FROM bethadba.foguiainss g " +
+                "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
+                "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11 AND e.i_ccustos = ?", conn);
+            cmd.Parameters.AddWithValue("c", sql);
+            cmd.Parameters.AddWithValue("cc", centro);
+            using var rd = cmd.ExecuteReader();
+            if (rd.Read() && !rd.IsDBNull(0)) rb.TotalInss = Convert.ToDecimal(rd[0]);
+        }
+        catch
+        {
+            Logger.Log("ObterResumoBases: tabela foguiainss não encontrada, calculando via fomovto");
+            try
+            {
+                using var cmd2 = new OdbcCommand(
+                    "SELECT ROUND(SUM(m.valor_cal),2) FROM bethadba.fomovto m " +
+                    "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
+                    "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
+                    "AND UPPER(e.nome) LIKE '%I.N.S.S%' OR (m.prov_desc = 'I' AND m.i_eventos IN (SELECT i_eventos FROM bethadba.foeventos WHERE UPPER(nome) LIKE '%INSS%'))", conn);
+                cmd2.Parameters.AddWithValue("ini", sql);
+                cmd2.Parameters.AddWithValue("fim", sql);
+                cmd2.Parameters.AddWithValue("cc", centro);
+                using var rd2 = cmd2.ExecuteReader();
+                if (rd2.Read() && !rd2.IsDBNull(0)) rb.TotalInss = Convert.ToDecimal(rd2[0]);
+            }
+            catch { }
+        }
+
+        // 4) FGTS — tenta tabela fofgtsfilial, senão calcula via fomovto
+        try
+        {
+            using var cmd = new OdbcCommand(
+                "SELECT ROUND(SUM(g.total_fgts),2) FROM bethadba.fofgtsfilial g " +
+                "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
+                "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11 AND e.i_ccustos = ?", conn);
+            cmd.Parameters.AddWithValue("c", sql);
+            cmd.Parameters.AddWithValue("cc", centro);
+            using var rd = cmd.ExecuteReader();
+            if (rd.Read() && !rd.IsDBNull(0)) rb.ValorFgts = Convert.ToDecimal(rd[0]);
+        }
+        catch
+        {
+            Logger.Log("ObterResumoBases: tabela fofgtsfilial não encontrada, calculando via fomovto");
+            try
+            {
+                using var cmd2 = new OdbcCommand(
+                    "SELECT ROUND(SUM(m.valor_cal),2) FROM bethadba.fomovto m " +
+                    "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "AND m.tipo_proces = 11 AND m.i_empregados IN " +
+                    "(SELECT e2.i_empregados FROM bethadba.foempregados e2 WHERE e2.codi_emp = 1 AND e2.i_ccustos = ?) " +
+                    "AND m.prov_desc = 'I' AND m.i_eventos IN " +
+                    "(SELECT ev.i_eventos FROM bethadba.foeventos ev WHERE ev.codi_emp = 1 AND UPPER(ev.nome) LIKE '%FGTS%')", conn);
+                cmd2.Parameters.AddWithValue("ini", sql);
+                cmd2.Parameters.AddWithValue("fim", sql);
+                cmd2.Parameters.AddWithValue("cc", centro);
+                using var rd2 = cmd2.ExecuteReader();
+                if (rd2.Read() && !rd2.IsDBNull(0)) rb.ValorFgts = Convert.ToDecimal(rd2[0]);
+            }
+            catch { }
+        }
+
+        // 5) bases (INSS, FGTS, IRRF) — calcula tudo via fomovto
+        try
+        {
+            using var cmd = new OdbcCommand(
+                "SELECT " +
+                "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END),2), " +
+                "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END),2), " +
+                "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END),2) " +
+                "FROM bethadba.fomovto m " +
+                "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
+                "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                "AND m.tipo_proces = 11 AND e.i_ccustos = ?", conn);
+            cmd.Parameters.AddWithValue("ini", sql);
+            cmd.Parameters.AddWithValue("fim", sql);
+            cmd.Parameters.AddWithValue("cc", centro);
+            using var rd = cmd.ExecuteReader();
+            if (rd.Read())
+            {
+                rb.SalarioContribEmpregados = rd.IsDBNull(0) ? 0m : Convert.ToDecimal(rd[0]);
+                rb.BaseFgts = rd.IsDBNull(1) ? 0m : Convert.ToDecimal(rd[1]);
+                rb.BaseIrrfMensal = rd.IsDBNull(2) ? 0m : Convert.ToDecimal(rd[2]);
+            }
+        }
+        catch { Logger.LogErro("ObterResumoBases.bases", new Exception("query bases")); }
+
+        // 6) IRRF total do centro (soma dos descontos com IRRF no nome)
+        try
+        {
+            using var cmd = new OdbcCommand(
+                "SELECT ROUND(SUM(m.valor_cal),2) FROM bethadba.fomovto m " +
+                "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
+                "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
+                "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
+                "AND m.prov_desc = 'I' AND UPPER(ev.nome) LIKE '%IMPOSTO%'", conn);
+            cmd.Parameters.AddWithValue("ini", sql);
+            cmd.Parameters.AddWithValue("fim", sql);
+            cmd.Parameters.AddWithValue("cc", centro);
+            using var rd = cmd.ExecuteReader();
+            if (rd.Read() && !rd.IsDBNull(0)) rb.ValorIrrfMensal = Convert.ToDecimal(rd[0]);
+        }
+        catch { rb.ValorIrrfMensal = rb.Descontos; }
+
+        // 7) situações
+        try
+        {
+            using var cmd = new OdbcCommand(
+                "SELECT " +
+                "SUM(CASE WHEN f.liquido > 0 THEN 1 ELSE 0 END) " +
+                "FROM bethadba.foliquidosfilepr f " +
+                "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
+                "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
+                "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 AND e.i_ccustos = ?", conn);
+            cmd.Parameters.AddWithValue("c", sql);
+            cmd.Parameters.AddWithValue("cc", centro);
+            using var rd = cmd.ExecuteReader();
+            if (rd.Read() && !rd.IsDBNull(0)) rb.Trabalhando = Convert.ToInt32(rd[0]);
+        }
+        catch { }
+
+        rb.BaseTotalInss = rb.SalarioContribEmpregados;
+        rb.BaseFgtsAprendiz = 0;
+        rb.Admissoes = 0;
+        rb.Demitido = 0;
+        rb.Afastado = 0;
+        rb.NumEmpregados = rb.NumEmpregados > 0 ? rb.NumEmpregados : rb.Trabalhando;
+
+        return rb;
     }
 
     public List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)>
