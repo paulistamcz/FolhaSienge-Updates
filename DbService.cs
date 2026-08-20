@@ -1538,16 +1538,18 @@ public class DbService
                 using var cmd2 = new OdbcCommand(
                     "SELECT ROUND(SUM(m.valor_cal),2) FROM bethadba.fomovto m " +
                     "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
+                    "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
                     "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                     "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
-                    "AND UPPER(e.nome) LIKE '%I.N.S.S%' OR (m.prov_desc = 'I' AND m.i_eventos IN (SELECT i_eventos FROM bethadba.foeventos WHERE UPPER(nome) LIKE '%INSS%'))", conn);
+                    "AND (UPPER(ev.nome) LIKE '%I.N.S.S%' OR UPPER(ev.nome) LIKE '%INSS%')", conn);
                 cmd2.Parameters.AddWithValue("ini", sql);
                 cmd2.Parameters.AddWithValue("fim", sql);
                 cmd2.Parameters.AddWithValue("cc", centro);
                 using var rd2 = cmd2.ExecuteReader();
                 if (rd2.Read() && !rd2.IsDBNull(0)) rb.TotalInss = Convert.ToDecimal(rd2[0]);
+                Logger.Log($"ObterResumoBases: INSS via fomovto = {rb.TotalInss}");
             }
-            catch { }
+            catch (Exception ex) { Logger.LogErro("ObterResumoBases.inss_fallback", ex); }
         }
 
         // 4) FGTS — tenta tabela fofgtsfilial, senão calcula via fomovto
@@ -1569,18 +1571,19 @@ public class DbService
             {
                 using var cmd2 = new OdbcCommand(
                     "SELECT ROUND(SUM(m.valor_cal),2) FROM bethadba.fomovto m " +
+                    "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
+                    "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
                     "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
-                    "AND m.tipo_proces = 11 AND m.i_empregados IN " +
-                    "(SELECT e2.i_empregados FROM bethadba.foempregados e2 WHERE e2.codi_emp = 1 AND e2.i_ccustos = ?) " +
-                    "AND m.prov_desc = 'I' AND m.i_eventos IN " +
-                    "(SELECT ev.i_eventos FROM bethadba.foeventos ev WHERE ev.codi_emp = 1 AND UPPER(ev.nome) LIKE '%FGTS%')", conn);
+                    "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
+                    "AND (UPPER(ev.nome) LIKE '%F.G.T.S%' OR UPPER(ev.nome) LIKE '%FGTS%')", conn);
                 cmd2.Parameters.AddWithValue("ini", sql);
                 cmd2.Parameters.AddWithValue("fim", sql);
                 cmd2.Parameters.AddWithValue("cc", centro);
                 using var rd2 = cmd2.ExecuteReader();
                 if (rd2.Read() && !rd2.IsDBNull(0)) rb.ValorFgts = Convert.ToDecimal(rd2[0]);
+                Logger.Log($"ObterResumoBases: FGTS via fomovto = {rb.ValorFgts}");
             }
-            catch { }
+            catch (Exception ex) { Logger.LogErro("ObterResumoBases.fgts_fallback", ex); }
         }
 
         // 5) bases (INSS, FGTS, IRRF) — calcula tudo via fomovto
@@ -1617,14 +1620,15 @@ public class DbService
                 "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
                 "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                 "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
-                "AND m.prov_desc = 'I' AND UPPER(ev.nome) LIKE '%IMPOSTO%'", conn);
+                "AND (UPPER(ev.nome) LIKE '%I.R.R.F%' OR UPPER(ev.nome) LIKE '%IRRF%' OR UPPER(ev.nome) LIKE '%IMPOSTO DE RENDA%')", conn);
             cmd.Parameters.AddWithValue("ini", sql);
             cmd.Parameters.AddWithValue("fim", sql);
             cmd.Parameters.AddWithValue("cc", centro);
             using var rd = cmd.ExecuteReader();
             if (rd.Read() && !rd.IsDBNull(0)) rb.ValorIrrfMensal = Convert.ToDecimal(rd[0]);
+            Logger.Log($"ObterResumoBases: IRRF via fomovto = {rb.ValorIrrfMensal}");
         }
-        catch { rb.ValorIrrfMensal = rb.Descontos; }
+        catch (Exception ex) { Logger.LogErro("ObterResumoBases.irrf_fallback", ex); rb.ValorIrrfMensal = rb.Descontos; }
 
         // 7) situações
         try
