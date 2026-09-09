@@ -25,6 +25,8 @@ partial class Form1
     private Button btnConectarRede;
 
     private GroupBox grpDados;
+    private Label lblEmpresa;
+    private ComboBox cmbEmpresa;
     private Label lblCompetencia;
     private ComboBox cmbCompetencia;
     private Button btnCarregarCentros;
@@ -110,6 +112,8 @@ partial class Form1
         this.txtServidor = new TextBox();
         this.btnConectarRede = new Button();
         this.grpDados = new GroupBox();
+        this.lblEmpresa = new Label();
+        this.cmbEmpresa = new ComboBox();
         this.lblCompetencia = new Label();
         this.cmbCompetencia = new ComboBox();
         this.btnCarregarCentros = new Button();
@@ -288,6 +292,8 @@ partial class Form1
         // 
         // grpDados
         // 
+        this.grpDados.Controls.Add(this.lblEmpresa);
+        this.grpDados.Controls.Add(this.cmbEmpresa);
         this.grpDados.Controls.Add(this.lblCompetencia);
         this.grpDados.Controls.Add(this.cmbCompetencia);
         this.grpDados.Controls.Add(this.btnCarregarCentros);
@@ -302,10 +308,29 @@ partial class Form1
         this.grpDados.TabStop = false;
         this.grpDados.Text = "2. Competência e centros de custo";
         // 
+        // lblEmpresa
+        // 
+        this.lblEmpresa.AutoSize = true;
+        this.lblEmpresa.Location = new System.Drawing.Point(16, 24);
+        this.lblEmpresa.Name = "lblEmpresa";
+        this.lblEmpresa.Size = new System.Drawing.Size(56, 15);
+        this.lblEmpresa.TabIndex = 0;
+        this.lblEmpresa.Text = "Empresa:";
+        // 
+        // cmbEmpresa
+        // 
+        this.cmbEmpresa.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbEmpresa.Enabled = false;
+        this.cmbEmpresa.Location = new System.Drawing.Point(76, 20);
+        this.cmbEmpresa.Name = "cmbEmpresa";
+        this.cmbEmpresa.Size = new System.Drawing.Size(200, 23);
+        this.cmbEmpresa.TabIndex = 1;
+        this.cmbEmpresa.SelectedIndexChanged += new EventHandler(this.cmbEmpresa_SelectedIndexChanged);
+        // 
         // lblCompetencia
         // 
         this.lblCompetencia.AutoSize = true;
-        this.lblCompetencia.Location = new System.Drawing.Point(16, 24);
+        this.lblCompetencia.Location = new System.Drawing.Point(290, 24);
         this.lblCompetencia.Name = "lblCompetencia";
         this.lblCompetencia.Size = new System.Drawing.Size(76, 15);
         this.lblCompetencia.TabIndex = 0;
@@ -315,7 +340,7 @@ partial class Form1
         // 
         this.cmbCompetencia.DropDownStyle = ComboBoxStyle.DropDownList;
         this.cmbCompetencia.Enabled = false;
-        this.cmbCompetencia.Location = new System.Drawing.Point(98, 20);
+        this.cmbCompetencia.Location = new System.Drawing.Point(372, 20);
         this.cmbCompetencia.Name = "cmbCompetencia";
         this.cmbCompetencia.Size = new System.Drawing.Size(180, 23);
         this.cmbCompetencia.TabIndex = 1;
@@ -324,7 +349,7 @@ partial class Form1
         // btnCarregarCentros
         // 
         this.btnCarregarCentros.Enabled = false;
-        this.btnCarregarCentros.Location = new System.Drawing.Point(284, 19);
+        this.btnCarregarCentros.Location = new System.Drawing.Point(560, 19);
         this.btnCarregarCentros.Name = "btnCarregarCentros";
         this.btnCarregarCentros.Size = new System.Drawing.Size(180, 26);
         this.btnCarregarCentros.TabIndex = 2;
@@ -335,7 +360,7 @@ partial class Form1
         // btnRelatorioMensal
         // 
         this.btnRelatorioMensal.Enabled = false;
-        this.btnRelatorioMensal.Location = new System.Drawing.Point(470, 19);
+        this.btnRelatorioMensal.Location = new System.Drawing.Point(760, 19);
         this.btnRelatorioMensal.Name = "btnRelatorioMensal";
         this.btnRelatorioMensal.Size = new System.Drawing.Size(180, 26);
         this.btnRelatorioMensal.TabIndex = 30;
@@ -349,7 +374,7 @@ partial class Form1
         this.chkTodos.Checked = true;
         this.chkTodos.CheckState = CheckState.Checked;
         this.chkTodos.Enabled = false;
-        this.chkTodos.Location = new System.Drawing.Point(660, 23);
+        this.chkTodos.Location = new System.Drawing.Point(16, 55);
         this.chkTodos.Name = "chkTodos";
         this.chkTodos.Size = new System.Drawing.Size(119, 19);
         this.chkTodos.TabIndex = 3;
@@ -362,9 +387,9 @@ partial class Form1
         this.dgvCentros.AllowUserToAddRows = false;
         this.dgvCentros.AllowUserToDeleteRows = false;
         this.dgvCentros.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
-        this.dgvCentros.Location = new System.Drawing.Point(16, 52);
+        this.dgvCentros.Location = new System.Drawing.Point(16, 84);
         this.dgvCentros.Name = "dgvCentros";
-        this.dgvCentros.Size = new System.Drawing.Size(928, 238);
+        this.dgvCentros.Size = new System.Drawing.Size(928, 206);
         this.dgvCentros.TabIndex = 4;
         this.dgvCentros.ReadOnly = false;
         this.dgvCentros.RowHeadersVisible = false;

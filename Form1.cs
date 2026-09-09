@@ -13,6 +13,7 @@ public partial class Form1 : Form
     private string? _csvGeradoGrf;
     private string? _csvGeradoFolha;
     private string? _csvGeradoGuias;
+    private bool _carregandoEmpresas;
 
     public Form1()
     {
@@ -258,7 +259,7 @@ public partial class Form1 : Form
             btnCarregarGrf.Enabled = true;
             btnGerarFolha.Enabled = true;
             btnGerarGuias.Enabled = true;
-            CarregarCompetencias();
+            CarregarEmpresas();
             btnGerarCsv.Enabled = false;
             btnSalvarCsv.Enabled = false;
             dgvCentros.DataSource = null;
@@ -271,6 +272,74 @@ public partial class Form1 : Form
             btnCarregarCentros.Enabled = false;
             MessageBox.Show("Falha na conexão com o banco.\n\n" + ex.Message,
                 "Erro de conexão", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void CarregarEmpresas()
+    {
+        try
+        {
+            _carregandoEmpresas = true;
+            cmbEmpresa.Items.Clear();
+            var empresas = new DbService().ListarEmpresas(_conn!);
+            foreach (var (cod, nome) in empresas)
+                cmbEmpresa.Items.Add(new ComboEmpresa(cod, nome));
+            cmbEmpresa.Enabled = cmbEmpresa.Items.Count > 0;
+            if (cmbEmpresa.Items.Count > 0)
+            {
+                // Seleciona a última empresa escolhida (ou a 1) e recarrega competências.
+                if (DbService.Empresa <= 0 || !empresas.Any(e => e.Codigo == DbService.Empresa))
+                    DbService.Empresa = 1;
+                var atual = cmbEmpresa.Items.Cast<ComboEmpresa>().FirstOrDefault(e => e.Codigo == DbService.Empresa);
+                cmbEmpresa.SelectedItem = atual ?? cmbEmpresa.Items[0];
+            }
+            else
+            {
+                cmbCompetencia.Items.Clear();
+                btnCarregarCentros.Enabled = false;
+                btnRelatorioMensal.Enabled = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            lblStatusBanco.Text = "Erro ao listar empresas: " + ex.Message;
+            lblStatusBanco.ForeColor = System.Drawing.Color.Red;
+            MessageBox.Show("Erro ao listar empresas:\n\n" + ex.Message,
+                "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _carregandoEmpresas = false;
+        }
+    }
+
+    private void cmbEmpresa_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        if (_carregandoEmpresas) return;
+        if (cmbEmpresa.SelectedItem is ComboEmpresa emp)
+        {
+            DbService.Empresa = emp.Codigo;
+            dgvCentros.DataSource = null;
+            dgvFolha.DataSource = null;
+            dgvGrf.DataSource = null;
+            dgvGuias.DataSource = null;
+            txtResultado.Clear();
+            txtResultadoFolha.Clear();
+            txtResultadoGrf.Clear();
+            txtResultadoGuias.Clear();
+            _csvGerado = null;
+            _csvGeradoGrf = null;
+            _csvGeradoFolha = null;
+            _csvGeradoGuias = null;
+            btnGerarCsv.Enabled = false;
+            btnSalvarCsv.Enabled = false;
+            btnGerarGrf.Enabled = false;
+            btnSalvarGrf.Enabled = false;
+            btnGerarFolha.Enabled = true;
+            btnSalvarFolha.Enabled = false;
+            btnGerarGuias.Enabled = true;
+            btnSalvarGuias.Enabled = false;
+            CarregarCompetencias();
         }
     }
 
@@ -1232,4 +1301,13 @@ public class ComboCentro
     public string Nome { get; }
     public ComboCentro(int codigo, string nome) { Codigo = codigo; Nome = nome; }
     public override string ToString() => Codigo == 0 ? Nome : $"{Codigo:D4} - {Nome}";
+}
+
+/// <summary>Item do combo de empresa (codi_emp + nome fantasia/razão).</summary>
+public class ComboEmpresa
+{
+    public int Codigo { get; }
+    public string Nome { get; }
+    public ComboEmpresa(int codigo, string nome) { Codigo = codigo; Nome = nome; }
+    public override string ToString() => $"{Codigo} - {Nome}";
 }

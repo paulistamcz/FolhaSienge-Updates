@@ -8,6 +8,9 @@ public class DbService
     public const string Usuario = "EXTERNO";
     public const string Senha = "123654";
 
+    /// <summary>Empresa (codi_emp) selecionada no app. Usada em todas as consultas.</summary>
+    public static int Empresa = 1;
+
     public static readonly string[] EnginesCandidatos =
     {
         "srvcontabil",
@@ -219,13 +222,39 @@ public class DbService
         var lista = new List<string>();
         using var cmd = new OdbcCommand(
             "SELECT DISTINCT l.competencia FROM bethadba.foliquidosfil l " +
-            "WHERE l.codi_emp = 1 ORDER BY l.competencia DESC", conn);
+            "WHERE l.codi_emp = " + DbService.Empresa + " ORDER BY l.competencia DESC", conn);
         using var rd = cmd.ExecuteReader();
         while (rd.Read())
         {
             var f = FormatarCompetencia(rd[0]);
             if (!string.IsNullOrEmpty(f))
                 lista.Add(f);
+        }
+        return lista;
+    }
+
+    /// <summary>
+    /// Lista as empresas (codi_emp) que possuem folha registrada (foliquidosfil),
+    /// com o nome fantasia/razão vindo de geempre quando existir.
+    /// </summary>
+    public List<(int Codigo, string Nome)> ListarEmpresas(OdbcConnection conn)
+    {
+        var lista = new List<(int, string)>();
+        using var cmd = new OdbcCommand(
+            "SELECT DISTINCT l.codi_emp, g.razao_emp, g.fantasia_emp " +
+            "FROM bethadba.foliquidosfil l " +
+            "LEFT JOIN bethadba.geempre g ON l.codi_emp = g.codi_emp " +
+            "ORDER BY l.codi_emp", conn);
+        using var rd = cmd.ExecuteReader();
+        var usados = new HashSet<int>();
+        while (rd.Read())
+        {
+            int cod = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+            if (!usados.Add(cod)) continue;
+            string razao = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+            string fantasia = rd.IsDBNull(2) ? "" : Convert.ToString(rd[2])!;
+            string nome = string.IsNullOrWhiteSpace(fantasia) ? razao : fantasia;
+            lista.Add((cod, nome));
         }
         return lista;
     }
@@ -240,7 +269,7 @@ public class DbService
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = ? " +
+            "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = ? " +
             "ORDER BY e.i_ccustos", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
         cmd.Parameters.AddWithValue("tipo", tipoProcess);
@@ -262,7 +291,7 @@ public class DbService
             "FROM bethadba.foliquidosfilepr f " +
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = ? " +
+            "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = ? " +
             "AND e.i_ccustos = ?", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
         cmd.Parameters.AddWithValue("tipo", tipoProcess);
@@ -287,7 +316,7 @@ public class DbService
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 " +
+            "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11 " +
             "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
         using var rd = cmd.ExecuteReader();
@@ -337,7 +366,7 @@ public class DbService
             "FROM bethadba.foliquidosfilepr f " +
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = ? " +
+            "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = ? " +
             "AND ROUND(f.liquido, 2) > 0 " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
@@ -389,7 +418,7 @@ public class DbService
             "SELECT e.i_ccustos, TRIM(e.nome), f.I_EMPREGADOS, ROUND(f.VALOR_REMUNERACAO, 2) " +
             "FROM bethadba.FOFERIAS f " +
             "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
-            "WHERE f.CODI_EMP = 1 AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
+            "WHERE f.CODI_EMP = " + DbService.Empresa + " AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
             "AND ROUND(f.VALOR_REMUNERACAO, 2) > 0 " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         cmd.Parameters.AddWithValue("ini", ini);
@@ -419,7 +448,7 @@ public class DbService
             "FROM bethadba.FOFERIAS f " +
             "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE f.CODI_EMP = 1 AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
+            "WHERE f.CODI_EMP = " + DbService.Empresa + " AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
             "AND ROUND(f.VALOR_REMUNERACAO, 2) > 0 " +
             "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn);
         cmd.Parameters.AddWithValue("ini", ini);
@@ -449,7 +478,7 @@ public class DbService
             "ROUND(g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts, 2) " +
             "FROM bethadba.foguiagrfc g " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
-            "WHERE g.codi_emp = 1 AND g.vencimento >= ? AND g.vencimento <= ? " +
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
             "AND (g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts) > 0 " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         cmd.Parameters.AddWithValue("ini", ini);
@@ -480,7 +509,7 @@ public class DbService
             "FROM bethadba.foguiagrfc g " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE g.codi_emp = 1 AND g.vencimento >= ? AND g.vencimento <= ? " +
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
             "AND (g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts) > 0 " +
             "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn);
         cmd.Parameters.AddWithValue("ini", ini);
@@ -504,7 +533,7 @@ public class DbService
         using var cmd = new OdbcCommand(
             "SELECT SUM(f.liquido) FROM bethadba.foliquidosfilepr f " +
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11", conn);
+            "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
         using var rd = cmd.ExecuteReader();
         if (rd.Read() && !rd.IsDBNull(0))
@@ -527,7 +556,7 @@ public class DbService
             "FROM bethadba.fomovto m " +
             "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
             "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
-            "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+            "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
             "AND m.tipo_proces = 11 AND ev.classificacao = ? " +
             "GROUP BY e.i_ccustos, e.nome, m.i_empregados " +
             "ORDER BY e.i_ccustos, e.nome", conn);
@@ -563,7 +592,7 @@ public class DbService
             "FROM bethadba.fomovto m " +
             "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
             "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
-            "WHERE m.codi_emp = 1 AND m.tipo_proces = 11 " +
+            "WHERE m.codi_emp = " + DbService.Empresa + " AND m.tipo_proces = 11 " +
             "AND m.prov_desc = 'D'" + filtroClasse +
             " GROUP BY e.i_ccustos, e.nome, m.i_empregados " +
             "ORDER BY e.i_ccustos, e.nome", conn);
@@ -588,7 +617,7 @@ public class DbService
         var sql = CompetenciaParaSql(comp);
         using var cmd = new OdbcCommand(
             "SELECT SUM(g.total_guia) FROM bethadba.foguiainss g " +
-            "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11", conn);
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.competencia = ? AND g.tipo_process = 11", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
         using var rd = cmd.ExecuteReader();
         if (rd.Read() && !rd.IsDBNull(0))
@@ -601,7 +630,7 @@ public class DbService
     {
         using var cmd = new OdbcCommand(
             "SELECT SUM(g.valor) FROM bethadba.focalcirrf g " +
-            "WHERE g.codi_emp = 1 AND g.vencimento >= ? AND g.vencimento <= ?", conn);
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ?", conn);
         cmd.Parameters.AddWithValue("ini", ini);
         cmd.Parameters.AddWithValue("fim", fim);
         using var rd = cmd.ExecuteReader();
@@ -616,7 +645,7 @@ public class DbService
         var sql = CompetenciaParaSql(comp);
         using var cmd = new OdbcCommand(
             "SELECT SUM(g.total_fgts) FROM bethadba.fofgtsfilial g " +
-            "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11", conn);
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.competencia = ? AND g.tipo_process = 11", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
         using var rd = cmd.ExecuteReader();
         if (rd.Read() && !rd.IsDBNull(0))
@@ -629,7 +658,7 @@ public class DbService
     {
         using var cmd = new OdbcCommand(
             "SELECT SUM(e.VALOR_SALDO_DEVEDOR) FROM bethadba.FOEMPRESTIMOS_CRED_TRAB_RESCISAO e " +
-            "WHERE e.CODI_EMP = 1 AND e.COMPETENCIA_RESCISAO >= ? AND e.COMPETENCIA_RESCISAO <= ?", conn);
+            "WHERE e.CODI_EMP = " + DbService.Empresa + " AND e.COMPETENCIA_RESCISAO >= ? AND e.COMPETENCIA_RESCISAO <= ?", conn);
         cmd.Parameters.AddWithValue("ini", ini);
         cmd.Parameters.AddWithValue("fim", fim);
         using var rd = cmd.ExecuteReader();
@@ -649,10 +678,10 @@ public class DbService
         var sql = CompetenciaParaSql(comp);
         using var cmd = new OdbcCommand(
             "SELECT 'INSS', g.total_guia, g.vencimento FROM bethadba.foguiainss g " +
-            "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11 " +
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.competencia = ? AND g.tipo_process = 11 " +
             "UNION ALL " +
             "SELECT 'FGTS', g.total_fgts, g.vencimento FROM bethadba.fofgtsfilial g " +
-            "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11", conn);
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.competencia = ? AND g.tipo_process = 11", conn);
         cmd.Parameters.AddWithValue("c1", sql);
         cmd.Parameters.AddWithValue("c2", sql);
         using var rd = cmd.ExecuteReader();
@@ -676,7 +705,7 @@ public class DbService
             "SELECT e.classificacao, SUM(m.valor_cal) " +
             "FROM bethadba.fomovto m " +
             "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
-            "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month, 1, ?) AND m.tipo_proces = 11 " +
+            "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month, 1, ?) AND m.tipo_proces = 11 " +
             "GROUP BY e.classificacao", conn);
         cmd.Parameters.AddWithValue("ini", sql);
         cmd.Parameters.AddWithValue("fim", sql);
@@ -699,7 +728,7 @@ public class DbService
         var sql = CompetenciaParaSql(comp);
         using var cmd = new OdbcCommand(
             "SELECT SUM(g.total_guia) FROM bethadba.foguiainss g " +
-            "WHERE g.codi_emp = 1 AND g.competencia >= ? AND g.competencia < DATEADD(month, 1, ?) " +
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.competencia >= ? AND g.competencia < DATEADD(month, 1, ?) " +
             "AND g.tipo_process = 11", conn);
         cmd.Parameters.AddWithValue("ini", sql);
         cmd.Parameters.AddWithValue("fim", sql);
@@ -772,7 +801,7 @@ public class DbService
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 " +
+            "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11 " +
             "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn))
         {
             cmd.Parameters.AddWithValue("c", sql);
@@ -795,7 +824,7 @@ public class DbService
             "FROM bethadba.fomovto m " +
             "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
             "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
-            "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) AND m.tipo_proces = 11 " +
+            "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) AND m.tipo_proces = 11 " +
             "GROUP BY e.i_ccustos, ev.classificacao, ev.nome, m.prov_desc " +
             "ORDER BY e.i_ccustos, m.prov_desc, ev.classificacao", conn))
         {
@@ -871,7 +900,7 @@ public class DbService
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 " +
+            "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11 " +
             "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn))
         {
             cmd.Parameters.AddWithValue("c", sql);
@@ -894,7 +923,7 @@ public class DbService
             "FROM bethadba.foliquidosfilepr f " +
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 " +
+            "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11 " +
             "GROUP BY e.i_ccustos", conn))
         {
             cmd.Parameters.AddWithValue("c", sql);
@@ -921,7 +950,7 @@ public class DbService
             "FROM bethadba.fomovto m " +
             "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
             "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
-            "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) AND m.tipo_proces = 11 " +
+            "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) AND m.tipo_proces = 11 " +
             "GROUP BY e.i_ccustos, ev.classificacao, ev.nome, m.prov_desc " +
             "ORDER BY e.i_ccustos, ev.classificacao", conn))
         {
@@ -1015,7 +1044,7 @@ public class DbService
             "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 " +
+            "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11 " +
             "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn))
         {
             cmd.Parameters.AddWithValue("c", sql);
@@ -1039,7 +1068,7 @@ public class DbService
             "FROM bethadba.fomovto m " +
             "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
             "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
-            "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) AND m.tipo_proces = 11 " +
+            "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) AND m.tipo_proces = 11 " +
             "GROUP BY e.i_ccustos, ev.nome, m.prov_desc " +
             "ORDER BY e.i_ccustos, ev.nome", conn))
         {
@@ -1067,7 +1096,7 @@ public class DbService
     public string NomeCentroCusto(OdbcConnection conn, int centro)
     {
         using var cmd = new OdbcCommand(
-            "SELECT nome FROM bethadba.foccustos WHERE codi_emp = 1 AND i_ccustos = ?", conn);
+            "SELECT nome FROM bethadba.foccustos WHERE codi_emp = " + DbService.Empresa + " AND i_ccustos = ?", conn);
         cmd.Parameters.AddWithValue("cc", centro);
         using var rd = cmd.ExecuteReader();
         if (rd.Read() && !rd.IsDBNull(0))
@@ -1176,7 +1205,7 @@ public class DbService
                 "FROM bethadba.foliquidosfilepr f " +
                 "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
                 "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
-                "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 AND ROUND(f.liquido,2) > 0";
+                "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11 AND ROUND(f.liquido,2) > 0";
             if (centro > 0) sqlFunc += " AND e.i_ccustos = ?";
             sqlFunc += " ORDER BY e.nome";
 
@@ -1218,7 +1247,7 @@ public class DbService
                 "FROM bethadba.foliquidosfilepr f " +
                 "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
                 "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
-                "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 AND ROUND(f.liquido,2) > 0";
+                "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11 AND ROUND(f.liquido,2) > 0";
             if (centro > 0) sqlFunc2 += " AND e.i_ccustos = ?";
             sqlFunc2 += " ORDER BY e.nome";
 
@@ -1249,7 +1278,7 @@ public class DbService
                     "SELECT m.i_eventos, e.nome, m.prov_desc, ROUND(SUM(m.valor_cal),2) " +
                     "FROM bethadba.fomovto m " +
                     "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
-                    "WHERE m.codi_emp = 1 AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "WHERE m.codi_emp = " + DbService.Empresa + " AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                     "AND m.tipo_proces = 11 " +
                     "GROUP BY m.i_eventos, e.nome, m.prov_desc " +
                     "ORDER BY m.prov_desc, m.i_eventos", conn);
@@ -1295,7 +1324,7 @@ public class DbService
                         "SELECT m.i_eventos, e.nome, m.prov_desc, ROUND(SUM(m.valor_cal),2) " +
                         "FROM bethadba.fomovto m " +
                         "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
-                        "WHERE m.codi_emp = 1 AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                        "WHERE m.codi_emp = " + DbService.Empresa + " AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                         "AND m.tipo_proces = 11 " +
                         "GROUP BY m.i_eventos, e.nome, m.prov_desc " +
                         "ORDER BY m.prov_desc, m.i_eventos", conn);
@@ -1344,7 +1373,7 @@ public class DbService
                     "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END),2), " +
                     "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END),2) " +
                     "FROM bethadba.fomovto m " +
-                    "WHERE m.codi_emp = 1 AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "WHERE m.codi_emp = " + DbService.Empresa + " AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                     "AND m.tipo_proces = 11", conn);
                 cmdBase.Parameters.AddWithValue("emp", f.Empregado);
                 cmdBase.Parameters.AddWithValue("ini", sql);
@@ -1375,7 +1404,7 @@ public class DbService
             using var cmdEmp = new OdbcCommand(
                 "SELECT DESCRICAO, ROUND(VALOR,2), QUANTIDADE_PARCELAS, NUMERO_CONTRATO " +
                 "FROM bethadba.FOEMPRESTIMOS_CONSIGNADOS " +
-                "WHERE CODI_EMP = 1 AND I_EMPREGADOS = ?", conn);
+                "WHERE CODI_EMP = " + DbService.Empresa + " AND I_EMPREGADOS = ?", conn);
             cmdEmp.Parameters.AddWithValue("emp", f.Empregado);
             using (var rdEmp = cmdEmp.ExecuteReader())
             {
@@ -1407,7 +1436,7 @@ public class DbService
                 "FROM bethadba.fomovto m " +
                 "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
                 "LEFT JOIN bethadba.foempregados emp ON m.codi_emp = emp.codi_emp AND m.i_empregados = emp.i_empregados " +
-                "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                 "AND m.tipo_proces = 11 AND emp.i_ccustos = ? " +
                 "GROUP BY m.i_eventos, e.nome, m.prov_desc " +
                 "ORDER BY m.prov_desc, m.i_eventos", conn);
@@ -1437,7 +1466,7 @@ public class DbService
                     "FROM bethadba.fomovto m " +
                     "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
                     "LEFT JOIN bethadba.foempregados emp ON m.codi_emp = emp.codi_emp AND m.i_empregados = emp.i_empregados " +
-                    "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                     "AND m.tipo_proces = 11 AND emp.i_ccustos = ? " +
                     "GROUP BY m.i_eventos, e.nome, m.prov_desc " +
                     "ORDER BY m.prov_desc, m.i_eventos", conn);
@@ -1478,7 +1507,7 @@ public class DbService
                 "FROM bethadba.foliquidosfilepr f " +
                 "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
                 "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
-                "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 AND e.i_ccustos = ?", conn);
+                "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11 AND e.i_ccustos = ?", conn);
             cmd.Parameters.AddWithValue("c", sql);
             cmd.Parameters.AddWithValue("cc", centro);
             using var rd = cmd.ExecuteReader();
@@ -1497,7 +1526,7 @@ public class DbService
                 "SELECT m.prov_desc, ROUND(SUM(m.valor_cal),2) " +
                 "FROM bethadba.fomovto m " +
                 "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
-                "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                 "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
                 "GROUP BY m.prov_desc", conn);
             cmd.Parameters.AddWithValue("ini", sql);
@@ -1520,7 +1549,7 @@ public class DbService
             using var cmd = new OdbcCommand(
                 "SELECT ROUND(SUM(g.total_guia),2) FROM bethadba.foguiainss g " +
                 "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
-                "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11 AND e.i_ccustos = ?", conn);
+                "WHERE g.codi_emp = " + DbService.Empresa + " AND g.competencia = ? AND g.tipo_process = 11 AND e.i_ccustos = ?", conn);
             cmd.Parameters.AddWithValue("c", sql);
             cmd.Parameters.AddWithValue("cc", centro);
             using var rd = cmd.ExecuteReader();
@@ -1535,7 +1564,7 @@ public class DbService
                     "SELECT ROUND(SUM(m.valor_cal),2) FROM bethadba.fomovto m " +
                     "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
                     "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
-                    "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                     "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
                     "AND (UPPER(ev.nome) LIKE '%I.N.S.S%' OR UPPER(ev.nome) LIKE '%INSS%')", conn);
                 cmd2.Parameters.AddWithValue("ini", sql);
@@ -1554,7 +1583,7 @@ public class DbService
             using var cmd = new OdbcCommand(
                 "SELECT ROUND(SUM(g.total_fgts),2) FROM bethadba.fofgtsfilial g " +
                 "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
-                "WHERE g.codi_emp = 1 AND g.competencia = ? AND g.tipo_process = 11 AND e.i_ccustos = ?", conn);
+                "WHERE g.codi_emp = " + DbService.Empresa + " AND g.competencia = ? AND g.tipo_process = 11 AND e.i_ccustos = ?", conn);
             cmd.Parameters.AddWithValue("c", sql);
             cmd.Parameters.AddWithValue("cc", centro);
             using var rd = cmd.ExecuteReader();
@@ -1569,7 +1598,7 @@ public class DbService
                     "SELECT ROUND(SUM(m.valor_cal),2) FROM bethadba.fomovto m " +
                     "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
                     "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
-                    "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                    "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                     "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
                     "AND (UPPER(ev.nome) LIKE '%F.G.T.S%' OR UPPER(ev.nome) LIKE '%FGTS%')", conn);
                 cmd2.Parameters.AddWithValue("ini", sql);
@@ -1592,7 +1621,7 @@ public class DbService
                 "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END),2) " +
                 "FROM bethadba.fomovto m " +
                 "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
-                "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                 "AND m.tipo_proces = 11 AND e.i_ccustos = ?", conn);
             cmd.Parameters.AddWithValue("ini", sql);
             cmd.Parameters.AddWithValue("fim", sql);
@@ -1614,7 +1643,7 @@ public class DbService
                 "SELECT ROUND(SUM(m.valor_cal),2) FROM bethadba.fomovto m " +
                 "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
                 "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
-                "WHERE m.codi_emp = 1 AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
+                "WHERE m.codi_emp = " + DbService.Empresa + " AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                 "AND m.tipo_proces = 11 AND e.i_ccustos = ? " +
                 "AND (UPPER(ev.nome) LIKE '%I.R.R.F%' OR UPPER(ev.nome) LIKE '%IRRF%' OR UPPER(ev.nome) LIKE '%IMPOSTO DE RENDA%')", conn);
             cmd.Parameters.AddWithValue("ini", sql);
@@ -1635,7 +1664,7 @@ public class DbService
                 "FROM bethadba.foliquidosfilepr f " +
                 "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
                 "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
-                "WHERE l.competencia = ? AND f.codi_emp = 1 AND l.tipo_process = 11 AND e.i_ccustos = ?", conn);
+                "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = 11 AND e.i_ccustos = ?", conn);
             cmd.Parameters.AddWithValue("c", sql);
             cmd.Parameters.AddWithValue("cc", centro);
             using var rd = cmd.ExecuteReader();
@@ -1662,7 +1691,7 @@ public class DbService
             "ROUND(g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts, 2) AS valor " +
             "FROM bethadba.foguiagrfc g " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
-            "WHERE g.codi_emp = 1 AND g.vencimento >= ? AND g.vencimento <= ? " +
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
             "AND (g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts) > 0 " +
             "ORDER BY g.vencimento, e.nome", conn);
         cmd.Parameters.AddWithValue("ini", ini);
