@@ -914,15 +914,54 @@ public partial class Form1 : Form
             }
             else
             {
-                var centros = svc.ListarCentrosCusto(_conn, comp, tipoProcess);
-                var linhasCompletas = new List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)>();
-                foreach (var c in centros)
+                // Lista analítica (por funcionário) para permitir seleção antes de agrupar por centro.
+                List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)> analiticas;
+                if (tipo == 2)
+                    analiticas = svc.ListarFeriasAnalitica(_conn, ini, fim);
+                else if (tipo == 3)
+                    analiticas = svc.ListarRescisaoAnalitica(_conn, ini, fim);
+                else
+                    analiticas = svc.ListarFolhaAnalitica(_conn, comp, tipoProcess)
+                        .Select(x => (x.Centro, x.NomeEmpregado, x.Empregado, x.Liquido))
+                        .ToList();
+
+                analiticas = FiltrarPorCentro(analiticas, x => x.Centro, centrosFiltro);
+                if (analiticas.Count == 0)
                 {
-                    if (centrosFiltro.Count > 0 && !centrosFiltro.Contains(c.Codigo)) continue;
-                    var (n, tot) = svc.TotalPorCentro(_conn, comp, c.Codigo, tipoProcess);
-                    if (tot > 0)
-                        linhasCompletas.Add((c.Codigo, c.Nome, n, tot, credorCod, credorNome));
+                    MessageBox.Show("Nenhum funcionário no período.", "Aviso",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
                 }
+
+                using (var sel = new SelecaoFuncionarios(
+                    analiticas.Select(x => (x.Empregado, x.NomeEmpregado, x.Centro, x.Valor)).ToList(),
+                    $"Selecionar funcionários - {cmbFolhaTipo.SelectedItem}"))
+                {
+                    if (sel.ShowDialog(this) != DialogResult.OK) return;
+                    var escolhidos = sel.Selecionados;
+                    if (escolhidos.Count == 0)
+                    {
+                        MessageBox.Show("Marque pelo menos um funcionário.", "Aviso",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    analiticas = escolhidos.Select(s => (s.Centro, s.Nome, s.Empregado, s.Valor)).ToList();
+                }
+
+                var agrupados = analiticas
+                    .GroupBy(x => x.Centro)
+                    .OrderBy(g => g.Key)
+                    .Select(g => (Centro: g.Key, Empregados: g.Count(), Total: g.Sum(x => x.Valor)))
+                    .ToList();
+                if (agrupados.Count == 0)
+                {
+                    MessageBox.Show("Nenhum valor na seleção.", "Aviso",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                var linhasCompletas = new List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)>();
+                foreach (var g in agrupados)
+                    linhasCompletas.Add((g.Centro, svc.NomeCentroCusto(_conn!, g.Centro), g.Empregados, g.Total, credorCod, credorNome));
                 if (linhasCompletas.Count == 0)
                 {
                     MessageBox.Show("Nenhum valor nesta competência.", "Aviso",
