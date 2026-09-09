@@ -36,17 +36,30 @@ public class SelecaoFuncionarios : Form
         foreach (var f in funcionarios)
             _dt.Rows.Add(true, f.Empregado, f.Nome, f.Centro, f.Valor);
 
+        var topo = new Panel { Dock = DockStyle.Top, Height = 36 };
         _chkTodos.Text = "Selecionar todos";
         _chkTodos.Checked = true;
         _chkTodos.AutoSize = true;
         _chkTodos.Location = new System.Drawing.Point(12, 10);
         _chkTodos.CheckedChanged += (s, e) => MarcarTodos(_chkTodos.Checked);
         _lblTotal.AutoSize = true;
-        _lblTotal.Location = new System.Drawing.Point(160, 13);
+        _lblTotal.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         AtualizarTotal();
+        topo.Controls.Add(_lblTotal);
+        topo.Controls.Add(_chkTodos);
 
-        _dgv.Location = new System.Drawing.Point(12, 36);
-        _dgv.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+        var rodape = new Panel { Dock = DockStyle.Bottom, Height = 48 };
+        _btnOk.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+        _btnCancelar.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+        _btnOk.DialogResult = DialogResult.OK;
+        _btnCancelar.DialogResult = DialogResult.Cancel;
+        _btnOk.Click += (s, e) => ColetarSelecionados();
+        _btnOk.Location = new System.Drawing.Point(rodape.ClientSize.Width - 176, 9);
+        _btnCancelar.Location = new System.Drawing.Point(rodape.ClientSize.Width - 92, 9);
+        rodape.Controls.Add(_btnOk);
+        rodape.Controls.Add(_btnCancelar);
+
+        _dgv.Dock = DockStyle.Fill;
         _dgv.AutoGenerateColumns = false;
         _dgv.AllowUserToAddRows = false;
         _dgv.RowHeadersVisible = false;
@@ -73,24 +86,20 @@ public class SelecaoFuncionarios : Form
         };
         _dgv.CellValueChanged += (s, e) => AtualizarTotal();
 
-        _btnOk.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-        _btnCancelar.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-        _btnOk.DialogResult = DialogResult.OK;
-        _btnCancelar.DialogResult = DialogResult.Cancel;
-        _btnOk.Click += (s, e) => ColetarSelecionados();
+        _dgv.Resize += (s, e) => ReposicionarLabelTotal(topo);
 
-        var topo = ClientSize.Height - 46;
-        _btnOk.Location = new System.Drawing.Point(ClientSize.Width - 176, topo);
-        _btnCancelar.Location = new System.Drawing.Point(ClientSize.Width - 92, topo);
-
-        Controls.Add(_chkTodos);
-        Controls.Add(_lblTotal);
         Controls.Add(_dgv);
-        Controls.Add(_btnOk);
-        Controls.Add(_btnCancelar);
+        Controls.Add(topo);
+        Controls.Add(rodape);
 
         AcceptButton = _btnOk;
         CancelButton = _btnCancelar;
+    }
+
+    private void ReposicionarLabelTotal(Panel topo)
+    {
+        _lblTotal.Left = topo.ClientSize.Width - _lblTotal.Width - 12;
+        _lblTotal.Top = 10;
     }
 
     private void MarcarTodos(bool marcar)
