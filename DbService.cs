@@ -6,7 +6,7 @@ namespace FolhaSienge;
 public class DbService
 {
     public const string Usuario = "EXTERNO";
-    public const string Senha = "123456";
+    public const string Senha = "123654";
 
     public static readonly string[] EnginesCandidatos =
     {
@@ -1171,8 +1171,8 @@ public class DbService
         try
         {
             var sqlFunc = "SELECT e.i_empregados, TRIM(e.nome), e.i_ccustos, ROUND(f.liquido,2), " +
-                "e.i_vinculos, e.i_cargos, e.situacao, e.cpf, e.i_departamentos, e.i_filiais, " +
-                "e.data_admissao, e.horas_mes, e.salario, e.nd " +
+                "e.vinculo, e.i_cargos, e.cpf, e.i_depto, e.i_filiais, " +
+                "e.admissao, e.horas_mes, e.salario " +
                 "FROM bethadba.foliquidosfilepr f " +
                 "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
                 "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
@@ -1195,14 +1195,12 @@ public class DbService
                         Liquido = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]),
                         Vinculo = rd.IsDBNull(4) ? "" : Convert.ToString(rd[4])!,
                         Cargo = rd.IsDBNull(5) ? "" : Convert.ToString(rd[5])!,
-                        Situacao = rd.IsDBNull(6) ? "" : Convert.ToString(rd[6])!,
-                        Cpf = rd.IsDBNull(7) ? "" : Convert.ToString(rd[7])!,
-                        Departamento = rd.IsDBNull(8) ? 0 : Convert.ToInt32(rd[8]),
-                        Filial = rd.IsDBNull(9) ? 0 : Convert.ToInt32(rd[9]),
-                        DataAdmissao = rd.IsDBNull(10) ? DateTime.MinValue : Convert.ToDateTime(rd[10]),
-                        HorasMes = rd.IsDBNull(11) ? 0m : Convert.ToDecimal(rd[11]),
-                        Salario = rd.IsDBNull(12) ? 0m : Convert.ToDecimal(rd[12]),
-                        Nd = rd.IsDBNull(13) ? 0 : Convert.ToInt32(rd[13]),
+                        Cpf = rd.IsDBNull(6) ? "" : Convert.ToString(rd[6])!,
+                        Departamento = rd.IsDBNull(7) ? 0 : Convert.ToInt32(rd[7]),
+                        Filial = rd.IsDBNull(8) ? 0 : Convert.ToInt32(rd[8]),
+                        DataAdmissao = rd.IsDBNull(9) ? DateTime.MinValue : Convert.ToDateTime(rd[9]),
+                        HorasMes = rd.IsDBNull(10) ? 0m : Convert.ToDecimal(rd[10]),
+                        Salario = rd.IsDBNull(11) ? 0m : Convert.ToDecimal(rd[11]),
                     });
                 }
             }
@@ -1248,12 +1246,12 @@ public class DbService
             try
             {
                 using var cmd = new OdbcCommand(
-                    "SELECT m.i_eventos, e.nome, m.prov_desc, ROUND(COALESCE(m.horas,0),2), ROUND(SUM(m.valor_cal),2) " +
+                    "SELECT m.i_eventos, e.nome, m.prov_desc, ROUND(SUM(m.valor_cal),2) " +
                     "FROM bethadba.fomovto m " +
                     "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
                     "WHERE m.codi_emp = 1 AND m.i_empregados = ? AND m.data >= ? AND m.data < DATEADD(month,1,?) " +
                     "AND m.tipo_proces = 11 " +
-                    "GROUP BY m.i_eventos, e.nome, m.prov_desc, m.horas " +
+                    "GROUP BY m.i_eventos, e.nome, m.prov_desc " +
                     "ORDER BY m.prov_desc, m.i_eventos", conn);
                 cmd.Parameters.AddWithValue("emp", f.Empregado);
                 cmd.Parameters.AddWithValue("ini", sql);
@@ -1265,14 +1263,13 @@ public class DbService
                         int codEvt = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
                         string nomeEvt = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
                         string prov = rd.IsDBNull(2) ? "" : Convert.ToString(rd[2])!;
-                        decimal horas = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
-                        decimal val = rd.IsDBNull(4) ? 0m : Convert.ToDecimal(rd[4]);
+                        decimal val = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
                         f.Linhas.Add(new LinhaEvento
                         {
                             CodigoEvento = codEvt,
                             NomeEvento = nomeEvt,
                             ProvDesc = prov,
-                            Horas = horas,
+                            Horas = 0,
                             Valor = val,
                         });
                         if (prov == "P") f.TotalProventos += val;
@@ -1406,8 +1403,7 @@ public class DbService
         try
         {
             using var cmd = new OdbcCommand(
-                "SELECT m.i_eventos, e.nome, m.prov_desc, " +
-                "ROUND(SUM(COALESCE(m.horas,0)),2), ROUND(SUM(m.valor_cal),2) " +
+                "SELECT m.i_eventos, e.nome, m.prov_desc, ROUND(SUM(m.valor_cal),2) " +
                 "FROM bethadba.fomovto m " +
                 "LEFT JOIN bethadba.foeventos e ON m.codi_emp = e.codi_emp AND m.i_eventos = e.i_eventos " +
                 "LEFT JOIN bethadba.foempregados emp ON m.codi_emp = emp.codi_emp AND m.i_empregados = emp.i_empregados " +
@@ -1426,8 +1422,8 @@ public class DbService
                     CodigoEvento = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]),
                     NomeEvento = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!,
                     ProvDesc = rd.IsDBNull(2) ? "" : Convert.ToString(rd[2])!,
-                    Horas = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]),
-                    Valor = rd.IsDBNull(4) ? 0m : Convert.ToDecimal(rd[4]),
+                    Horas = 0,
+                    Valor = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]),
                 });
             }
         }
