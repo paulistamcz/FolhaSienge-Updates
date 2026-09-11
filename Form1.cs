@@ -411,13 +411,14 @@ public partial class Form1 : Form
     private void PreencherCentrosFolha()
     {
         string comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
+        int tipoProcess = TipoProcessoTipoFolha();
         cmbFolhaCentro.Items.Clear();
         cmbFolhaCentro.Items.Add(new ComboCentro(0, "Todos os centros"));
         try
         {
             if (_conn != null && !string.IsNullOrWhiteSpace(comp))
             {
-                foreach (var c in new DbService().ListarCentrosCusto(_conn, comp))
+                foreach (var c in new DbService().ListarCentrosCusto(_conn, comp, tipoProcess))
                     cmbFolhaCentro.Items.Add(new ComboCentro(c.Codigo, c.Nome));
             }
         }
@@ -425,9 +426,21 @@ public partial class Form1 : Form
         cmbFolhaCentro.SelectedIndex = 0;
     }
 
+    /// <summary>Retorna o tipo de processo da folha conforme a seleção: Quinzena = 41, demais = 11.</summary>
+    private int TipoProcessoTipoFolha()
+    {
+        return cmbFolhaTipo.SelectedIndex == 1 ? 41 : 11;
+    }
+
     private void cmbFolhaCentro_SelectedIndexChanged(object sender, EventArgs e)
     {
         // Ao mudar o centro na aba Folha, não faz nada automático; só informa o filtro.
+    }
+
+    /// <summary>Ao trocar o tipo de folha (mensal/quinzena/férias/rescisões), recarrega os centros.</summary>
+    private void cmbFolhaTipo_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        PreencherCentrosFolha();
     }
 
     private void cmbVerba_SelectedIndexChanged(object sender, EventArgs e)
@@ -473,7 +486,7 @@ public partial class Form1 : Form
             return;
         }
         string comp = cmbCompetencia.SelectedItem.ToString()!;
-        var centros = new DbService().ListarCentrosCusto(_conn!, comp);
+        var centros = new DbService().ListarCentrosCusto(_conn!, comp, TipoProcessoTipoFolha());
 
         var dt = new DataTable();
         dt.Columns.Add("Sel", typeof(bool));

@@ -611,6 +611,7 @@ partial class Form1
         this.cmbFolhaTipo.Name = "cmbFolhaTipo";
         this.cmbFolhaTipo.Size = new System.Drawing.Size(180, 23);
         this.cmbFolhaTipo.TabIndex = 1;
+        this.cmbFolhaTipo.SelectedIndexChanged += new EventHandler(this.cmbFolhaTipo_SelectedIndexChanged);
         // 
         // lblFolhaModo
         // 
