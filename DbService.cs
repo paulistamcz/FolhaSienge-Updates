@@ -466,7 +466,13 @@ public class DbService
     }
 
     /// <summary>
-    /// Rescisões por empregado num período (analítico) - base = foguiagrfc (GRRF).
+    /// Líquido da rescisão: proventos − descontos reais (exclui os eventos
+    /// virtuais de líquido 51 LIQUIDO RESCISAO e 8517 LIQUIDO RESCISAO ESTAGIARIO).
+    private const string LiquidoRescisaoSql =
+        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'P') - " +
+        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'D' AND m.i_eventos NOT IN (51, 8517))";
+
+    /// Rescisões por empregado num período (analítico) - base = líquido (fomovto P − D).
     /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa.
     /// </summary>
     public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
@@ -475,11 +481,11 @@ public class DbService
         var lista = new List<(int, string, int, decimal)>();
         using var cmd = new OdbcCommand(
             "SELECT e.i_ccustos, TRIM(e.nome), g.i_empregados, " +
-            "ROUND(g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts, 2) " +
+            "ROUND(" + LiquidoRescisaoSql + ", 2) " +
             "FROM bethadba.foguiagrfc g " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
             "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
-            "AND (g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts) > 0 " +
+            "AND (" + LiquidoRescisaoSql + ") > 0 " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         cmd.Parameters.AddWithValue("ini", ini);
         cmd.Parameters.AddWithValue("fim", fim);
@@ -496,7 +502,7 @@ public class DbService
     }
 
     /// <summary>
-    /// Rescisões por centro (completo) num período - base = foguiagrfc.
+    /// Rescisões por centro (completo) num período - base = líquido (fomovto P − D).
     /// Retorna (Centro, Nome, Empregados, Total).
     /// </summary>
     public List<(int Centro, string Nome, int Empregados, decimal Total)>
@@ -504,14 +510,18 @@ public class DbService
     {
         var lista = new List<(int, string, int, decimal)>();
         using var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, c.nome, COUNT(*), " +
-            "ROUND(SUM(g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts), 2) " +
+            "SELECT e.i_ccustos, c.nome, COUNT(DISTINCT g.i_empregados), " +
+            "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END) - " +
+            "SUM(CASE WHEN m.prov_desc = 'D' AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END), 2) " +
             "FROM bethadba.foguiagrfc g " +
+            "JOIN bethadba.fomovto m ON m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
             "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
-            "AND (g.mes_ant_valor + g.resc_valor + g.aviso_previo_valor + g.multa_fgts) > 0 " +
-            "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn);
+            "GROUP BY e.i_ccustos, c.nome " +
+            "HAVING (SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END) - " +
+            "SUM(CASE WHEN m.prov_desc = 'D' AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END)) > 0 " +
+            "ORDER BY e.i_ccustos", conn);
         cmd.Parameters.AddWithValue("ini", ini);
         cmd.Parameters.AddWithValue("fim", fim);
         using var rd = cmd.ExecuteReader();
