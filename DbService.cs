@@ -334,7 +334,7 @@ public class DbService
     public static string GerarCsv(
         List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)> linhas,
         string vencimento, string verba, string competenciaDoc, string observacao = "",
-        string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "")
+        string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "")
     {
         var sb = new System.Text.StringBuilder();
         int i = 1;
@@ -346,7 +346,9 @@ public class DbService
             var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
             // Observação: se informada (ex.: nome do credor), acrescenta o nome do centro por linha.
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.Nome : $"{observacao} - {l.Nome}";
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};=\"{obra}\";=\"{unidade}\";=\"{itemOrcamento}\";=\"{departamento}\";{competenciaDoc};{obs}");
+            // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
+            if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};={obra};={unidade};={itemOrcamento};={departamento};{competenciaDoc};{obs}");
             i++;
         }
         return sb.ToString();
@@ -393,7 +395,7 @@ public class DbService
         List<(int Centro, string NomeEmpregado, int Empregado, decimal Liquido)> linhas,
         string vencimento, string verba, string credorCodigo, string credorNome,
         string competenciaDoc, string observacao = "",
-        string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "")
+        string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "")
     {
         var sb = new System.Text.StringBuilder();
         foreach (var l in linhas)
@@ -401,7 +403,9 @@ public class DbService
             var cc = l.Centro.ToString("D4");
             var valor = l.Liquido.ToString("0.00", CultureInfo.InvariantCulture);
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.NomeEmpregado : observacao + " - " + l.NomeEmpregado;
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};=\"{obra}\";=\"{unidade}\";=\"{itemOrcamento}\";=\"{departamento}\";{competenciaDoc};{obs}");
+            // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
+            if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};={obra};={unidade};={itemOrcamento};={departamento};{competenciaDoc};{obs}");
         }
         return sb.ToString();
     }
