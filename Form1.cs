@@ -455,6 +455,18 @@ public partial class Form1 : Form
         // Ao mudar o centro na aba Folha, não faz nada automático; só informa o filtro.
     }
 
+    /// <summary>Exibe o CSV gerado no campo de visualização, forçando o redesenho imediato.</summary>
+    private static void MostrarPrevia(TextBox txt, string texto)
+    {
+        txt.Text = texto;
+        txt.SelectionStart = 0;
+        txt.SelectionLength = 0;
+        txt.ScrollToCaret();
+        txt.Refresh();
+        txt.Update();
+        Application.DoEvents();
+    }
+
     /// <summary>Ao trocar o tipo de folha (mensal/quinzena/férias/rescisões), recarrega os centros.</summary>
     private void cmbFolhaTipo_SelectedIndexChanged(object sender, EventArgs e)
     {
@@ -602,7 +614,7 @@ public partial class Form1 : Form
             lblTotal.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
             _csvGerado = DbService.GerarCsv(_linhas, venc, verba, doc, obs);
-            txtResultado.Text = _csvGerado;
+            MostrarPrevia(txtResultado, _csvGerado);
             btnSalvarCsv.Enabled = true;
         }
         catch (Exception ex)
@@ -820,7 +832,7 @@ public partial class Form1 : Form
             return;
         }
         _csvGeradoGrf = DbService.GerarCsvGrf(selecionadas, centro, lote);
-        txtResultadoGrf.Text = _csvGeradoGrf;
+        MostrarPrevia(txtResultadoGrf, _csvGeradoGrf);
         btnSalvarGrf.Enabled = true;
     }
 
@@ -1098,7 +1110,7 @@ public partial class Form1 : Form
                 dgvFolha.Columns["Total"].DefaultCellStyle.Format = "N2";
             }
 
-            txtResultadoFolha.Text = _csvGeradoFolha;
+            MostrarPrevia(txtResultadoFolha, _csvGeradoFolha);
             btnSalvarFolha.Enabled = true;
         }
         catch (Exception ex)
@@ -1225,7 +1237,7 @@ public partial class Form1 : Form
                     sb.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};{obra};{unidade};{itemOrc};{departamento};{doc};{l.NomeEmpregado}");
                 }
                 _csvGeradoGuias = sb.ToString();
-                txtResultadoGuias.Text = _csvGeradoGuias;
+                MostrarPrevia(txtResultadoGuias, _csvGeradoGuias);
                 decimal tot = analiticoLinhas.Sum(x => x.Valor);
                 lblTotalGuias.Text = $"Total: R$ {tot.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
                 btnSalvarGuias.Enabled = true;
@@ -1291,7 +1303,7 @@ public partial class Form1 : Form
                     i++;
                 }
                 _csvGeradoGuias = sb2.ToString();
-                txtResultadoGuias.Text = _csvGeradoGuias;
+                MostrarPrevia(txtResultadoGuias, _csvGeradoGuias);
                 decimal total2 = linhasCompletas.Sum(x => x.Total);
                 lblTotalGuias.Text = $"Total: R$ {total2.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
                 btnSalvarGuias.Enabled = true;
