@@ -348,7 +348,7 @@ public class DbService
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.Nome : $"{observacao} - {l.Nome}";
             // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
             if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};={obra};={unidade};={itemOrcamento};={departamento};{competenciaDoc};{obs}");
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{competenciaDoc};{obs}");
             i++;
         }
         return sb.ToString();
@@ -405,7 +405,7 @@ public class DbService
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.NomeEmpregado : observacao + " - " + l.NomeEmpregado;
             // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
             if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};={obra};={unidade};={itemOrcamento};={departamento};{competenciaDoc};{obs}");
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{competenciaDoc};{obs}");
         }
         return sb.ToString();
     }

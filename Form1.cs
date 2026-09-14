@@ -1218,7 +1218,7 @@ public partial class Form1 : Form
                 {
                     var cc = l.Centro.ToString("D4");
                     var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
-                    sb.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};={obra};={unidade};={itemOrc};={departamento};{doc};{l.NomeEmpregado}");
+                    sb.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};{obra};{unidade};{itemOrc};{departamento};{doc};{l.NomeEmpregado}");
                 }
                 _csvGeradoGuias = sb.ToString();
                 txtResultadoGuias.Text = _csvGeradoGuias;
@@ -1283,7 +1283,7 @@ public partial class Form1 : Form
                     var cc = l.Centro.ToString("D4");
                     var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
                     string nomeCentro = string.IsNullOrWhiteSpace(l.Nome) ? svc.NomeCentroCusto(_conn!, l.Centro) : l.Nome;
-                    sb2.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};={obra};={unidade};={itemOrc};={departamento};{doc};{nomeCentro}");
+                    sb2.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};{obra};{unidade};{itemOrc};{departamento};{doc};{nomeCentro}");
                     i++;
                 }
                 _csvGeradoGuias = sb2.ToString();
