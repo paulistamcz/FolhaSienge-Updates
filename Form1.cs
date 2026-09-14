@@ -82,6 +82,20 @@ public partial class Form1 : Form
     {
         try
         {
+            // Se a última auto-atualização falhou, o instalador deixou o log para trás: avisa onde está.
+            try
+            {
+                var logFalha = Path.Combine(Path.GetTempPath(), "FolhaSienge_update", "instalador.log");
+                if (File.Exists(logFalha) && (await File.ReadAllTextAsync(logFalha)).Contains("FALHA"))
+                {
+                    MessageBox.Show(this,
+                        "A última tentativa de atualização automática falhou.\n\nDetalhes em:\n" + logFalha +
+                        "\n\nFeche todas as janelas do app e tente de novo, ou atualize manualmente pelo GitHub.",
+                        "Atualização", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    try { File.Move(logFalha, logFalha + ".verificado", true); } catch { }
+                }
+            }
+            catch { }
             var release = await Atualizador.BuscarUltimaVersaoAsync();
             if (Atualizador.TemVersaoNova(release))
             {

@@ -103,20 +103,49 @@ public static class Atualizador
         string exe = Path.GetFileName(Environment.ProcessPath)
                      ?? "FolhaSienge.exe";
         string nomeExe = Path.GetFileNameWithoutExtension(exe);
+        string exeDestino = Path.Combine(dirApp, exe);
+        string log = Path.Combine(dirUpd, "instalador.log");
         string bat = Path.Combine(dirApp, "atualizar.bat");
-        // espera o processo do app terminar de fechar antes de sobrescrever
+        // Script com log, espera limitada e repetição da cópia:
+        // - aguarda o app fechar (máx. ~90s; evita trava se outra janela ficou aberta)
+        // - repete o xcopy até 10x (arquivo pode estar travado por antivírus/bloqueio)
+        // - em caso de falha, mantém o log em dirUpd em vez de falhar em silêncio
         string conteudo =
             "@echo off\r\n" +
+            "setlocal\r\n" +
+            $"set \"LOG={log}\"\r\n" +
+            "echo [%date% %time%] Atualizador iniciado > \"%LOG%\"\r\n" +
+            $"echo Aguardando {exe} fechar... >> \"%LOG%\"\r\n" +
+            "set CONT=0\r\n" +
             ":espera\r\n" +
             $"tasklist /fi \"imagename eq {exe}\" 2>nul | find /i \"{nomeExe}\" >nul\r\n" +
-            "if %errorlevel%==0 (\r\n" +
-            "  ping -n 2 127.0.0.1 >nul\r\n" +
-            "  goto espera\r\n" +
-            ")\r\n" +
-            $"xcopy \"{extraido}\\*\" \"{dirApp}\" /e /y /q >nul\r\n" +
-            $"start \"\" \"{Path.Combine(dirApp, exe)}\"\r\n" +
+            "if not %errorlevel%==0 goto copia\r\n" +
+            "set /a CONT+=1\r\n" +
+            "if %CONT% GEQ 90 goto copia\r\n" +
+            "ping -n 2 127.0.0.1 >nul\r\n" +
+            "goto espera\r\n" +
+            ":copia\r\n" +
+            "echo [%date% %time%] Copiando arquivos novos... >> \"%LOG%\"\r\n" +
+            "set TENT=0\r\n" +
+            ":tenta\r\n" +
+            "set /a TENT+=1\r\n" +
+            $"xcopy \"{extraido}\\*\" \"{dirApp}\" /e /y /q >> \"%LOG%\" 2>&1\r\n" +
+            "if %errorlevel%==0 goto ok\r\n" +
+            "echo [%date% %time%] Tentativa %TENT% falhou (erro %errorlevel%) >> \"%LOG%\"\r\n" +
+            "if %TENT% GEQ 10 goto falha\r\n" +
+            "ping -n 3 127.0.0.1 >nul\r\n" +
+            "goto tenta\r\n" +
+            ":ok\r\n" +
+            "echo [%date% %time%] Copia concluida. Reiniciando... >> \"%LOG%\"\r\n" +
+            $"start \"\" \"{exeDestino}\"\r\n" +
+            "ping -n 2 127.0.0.1 >nul\r\n" +
             $"rd /s /q \"{dirUpd}\"\r\n" +
-            "del \"%~f0\"\r\n";
+            "del \"%~f0\"\r\n" +
+            "exit\r\n" +
+            ":falha\r\n" +
+            "echo [%date% %time%] FALHA: nao foi possivel substituir os arquivos apos 10 tentativas. >> \"%LOG%\"\r\n" +
+            $"echo Feche todas as janelas do app e verifique a permissao de escrita na pasta: {dirApp} >> \"%LOG%\"\r\n" +
+            "exit\r\n";
         File.WriteAllText(bat, conteudo, new System.Text.UTF8Encoding(false));
 
         try
