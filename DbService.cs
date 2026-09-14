@@ -470,11 +470,12 @@ public class DbService
     }
 
     /// <summary>
-    /// Líquido da rescisão: proventos − descontos reais (exclui os eventos
-    /// virtuais de líquido 51 LIQUIDO RESCISAO e 8517 LIQUIDO RESCISAO ESTAGIARIO).
+    /// Líquido da rescisão: proventos − descontos que compõem o líquido
+    /// (COMPOE_LIQUIDO=1; exclui os eventos virtuais 51/8517 e as linhas
+    /// informativas como DEPENDENTE IRRF e FGTS).
     private const string LiquidoRescisaoSql =
-        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'P') - " +
-        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'D' AND m.i_eventos NOT IN (51, 8517))";
+        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1) - " +
+        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517))";
 
     /// Rescisões por empregado num período (analítico) - base = líquido (fomovto P − D).
     /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa.
@@ -515,16 +516,17 @@ public class DbService
         var lista = new List<(int, string, int, decimal)>();
         using var cmd = new OdbcCommand(
             "SELECT e.i_ccustos, c.nome, COUNT(DISTINCT g.i_empregados), " +
-            "ROUND(SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END) - " +
-            "SUM(CASE WHEN m.prov_desc = 'D' AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END), 2) " +
+            "ROUND(SUM(CASE WHEN m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1 THEN m.valor_cal ELSE 0 END) - " +
+            "SUM(CASE WHEN m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END), 2) " +
             "FROM bethadba.foguiagrfc g " +
             "JOIN bethadba.fomovto m ON m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos " +
+            "JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
             "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
             "GROUP BY e.i_ccustos, c.nome " +
-            "HAVING (SUM(CASE WHEN m.prov_desc = 'P' THEN m.valor_cal ELSE 0 END) - " +
-            "SUM(CASE WHEN m.prov_desc = 'D' AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END)) > 0 " +
+            "HAVING (SUM(CASE WHEN m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1 THEN m.valor_cal ELSE 0 END) - " +
+            "SUM(CASE WHEN m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END)) > 0 " +
             "ORDER BY e.i_ccustos", conn);
         cmd.Parameters.AddWithValue("ini", ini);
         cmd.Parameters.AddWithValue("fim", fim);
