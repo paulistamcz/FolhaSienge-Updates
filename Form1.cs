@@ -897,10 +897,10 @@ public partial class Form1 : Form
         string funcaoFolha = tipo switch { 0 => "MENSAL", 1 => "ADIANTAMENTO", 2 => "FERIAS", _ => "RESCISAO" };
         string compSufixo;
         if (tipo == 2 || tipo == 3)
-            compSufixo = fim.ToString("MM/yy", CultureInfo.InvariantCulture);
+            compSufixo = fim.ToString("MM/yyyy", CultureInfo.InvariantCulture);
         else if (DateTime.TryParseExact(comp, "MM/yyyy", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var mesComp))
-            compSufixo = mesComp.ToString("MM/yy", CultureInfo.InvariantCulture);
+            compSufixo = mesComp.ToString("MM/yyyy", CultureInfo.InvariantCulture);
         else
             compSufixo = "";
         string sufixoObs = $"{funcaoFolha} {compSufixo}".Trim();
