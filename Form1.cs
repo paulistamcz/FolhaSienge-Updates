@@ -99,10 +99,14 @@ public partial class Form1 : Form
             var release = await Atualizador.BuscarUltimaVersaoAsync();
             if (Atualizador.TemVersaoNova(release))
             {
-                var resposta = MessageBox.Show(this,
-                    $"Existe uma nova versão disponível: {release!.Versao}\n\n" +
-                    $"Sua versão atual: {Atualizador.VersaoAtual}\n\n" +
-                    "Deseja atualizar agora? O app será fechado e reaberto automaticamente.",
+                var notas = (release!.Notas ?? "").Trim();
+                if (notas.Length > 1000) notas = notas.Substring(0, 1000) + "...";
+                var texto = $"Existe uma nova versão disponível: {release.Versao}\n\n" +
+                    $"Sua versão atual: {Atualizador.VersaoAtual}\n\n";
+                if (!string.IsNullOrWhiteSpace(notas))
+                    texto += $"O que mudou:\n{notas}\n\n";
+                texto += "Deseja atualizar agora? O app será fechado e reaberto automaticamente.";
+                var resposta = MessageBox.Show(this, texto,
                     "Atualização disponível",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Information);
                 if (resposta == DialogResult.Yes)

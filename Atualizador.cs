@@ -40,6 +40,10 @@ public static class Atualizador
                 ? t.GetString() ?? ""
                 : "";
 
+            string notas = root.TryGetProperty("body", out var b)
+                ? b.GetString() ?? ""
+                : "";
+
             string urlZip = "";
             if (root.TryGetProperty("assets", out var assets))
             {
@@ -58,7 +62,7 @@ public static class Atualizador
             if (string.IsNullOrWhiteSpace(tag) || string.IsNullOrWhiteSpace(urlZip))
                 return null;
 
-            return new VersaoRelease(tag.TrimStart('v'), urlZip);
+            return new VersaoRelease(tag.TrimStart('v'), urlZip, notas.Trim());
         }
         catch
         {
@@ -165,4 +169,4 @@ public static class Atualizador
 }
 
 /// <summary>Dados de um Release de atualização.</summary>
-public record VersaoRelease(string Versao, string UrlZip);
+public record VersaoRelease(string Versao, string UrlZip, string Notas = "");
