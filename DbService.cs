@@ -412,15 +412,16 @@ public class DbService
 
     /// <summary>
     /// Férias por empregado num período de pagamento (analítico).
-    /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa usando o
-    /// líquido (PROVENTOS − DESCONTOS), igual ao recibo do Domínio.
+    /// Retorna (Centro, NomeEmpregado, Empregado, Valor, IniGozo, FimGozo, Dias)
+    /// por concessão, usando o líquido (PROVENTOS − DESCONTOS), igual ao recibo.
     /// </summary>
-    public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
+    public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor, DateTime IniGozo, DateTime FimGozo, int Dias)>
         ListarFeriasAnalitica(OdbcConnection conn, DateTime ini, DateTime fim)
     {
-        var lista = new List<(int, string, int, decimal)>();
+        var lista = new List<(int, string, int, decimal, DateTime, DateTime, int)>();
         using var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, TRIM(e.nome), f.I_EMPREGADOS, ROUND((f.PROVENTOS - f.DESCONTOS), 2) " +
+            "SELECT e.i_ccustos, TRIM(e.nome), f.I_EMPREGADOS, ROUND((f.PROVENTOS - f.DESCONTOS), 2), " +
+            "f.INICIO_GOZO, f.FIM_GOZO, f.DIAS_FERIAS " +
             "FROM bethadba.FOFERIAS f " +
             "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
             "WHERE f.CODI_EMP = " + DbService.Empresa + " AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
@@ -435,21 +436,25 @@ public class DbService
             string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
             int emp = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
             decimal val = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
-            lista.Add((cc, nome, emp, val));
+            DateTime gozoIni = rd.IsDBNull(4) ? DateTime.MinValue : Convert.ToDateTime(rd[4]);
+            DateTime gozoFim = rd.IsDBNull(5) ? DateTime.MinValue : Convert.ToDateTime(rd[5]);
+            int dias = rd.IsDBNull(6) ? 0 : Convert.ToInt32(rd[6]);
+            lista.Add((cc, nome, emp, val, gozoIni, gozoFim, dias));
         }
         return lista;
     }
 
     /// <summary>
     /// Férias por centro (completo) num período de pagamento (líquido = PROVENTOS − DESCONTOS).
-    /// Retorna (Centro, Nome, Empregados, Total).
+    /// Retorna (Centro, Nome, Empregados, Total, IniGozoMin, FimGozoMax, DiasTotal).
     /// </summary>
-    public List<(int Centro, string Nome, int Empregados, decimal Total)>
+    public List<(int Centro, string Nome, int Empregados, decimal Total, DateTime IniGozo, DateTime FimGozo, int Dias)>
         ResumoFeriasCentros(OdbcConnection conn, DateTime ini, DateTime fim)
     {
-        var lista = new List<(int, string, int, decimal)>();
+        var lista = new List<(int, string, int, decimal, DateTime, DateTime, int)>();
         using var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, c.nome, COUNT(*), ROUND(SUM(f.PROVENTOS - f.DESCONTOS), 2) " +
+            "SELECT e.i_ccustos, c.nome, COUNT(*), ROUND(SUM(f.PROVENTOS - f.DESCONTOS), 2), " +
+            "MIN(f.INICIO_GOZO), MAX(f.FIM_GOZO), SUM(f.DIAS_FERIAS) " +
             "FROM bethadba.FOFERIAS f " +
             "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
@@ -465,9 +470,41 @@ public class DbService
             string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
             int emp = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
             decimal tot = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
-            lista.Add((cc, nome, emp, tot));
+            DateTime gozoIni = rd.IsDBNull(4) ? DateTime.MinValue : Convert.ToDateTime(rd[4]);
+            DateTime gozoFim = rd.IsDBNull(5) ? DateTime.MinValue : Convert.ToDateTime(rd[5]);
+            int dias = rd.IsDBNull(6) ? 0 : Convert.ToInt32(rd[6]);
+            lista.Add((cc, nome, emp, tot, gozoIni, gozoFim, dias));
         }
         return lista;
+    }
+
+    /// <summary>Monta o trecho de período das férias (ex.: "PERIODO 01/09/2026 A 30/09/2026 30 DIAS").</summary>
+    public static string PeriodoFerias(DateTime ini, DateTime fim, int dias)
+    {
+        if (ini == DateTime.MinValue || fim == DateTime.MinValue)
+            return "";
+        return $"PERIODO {ini:dd/MM/yyyy} A {fim:dd/MM/yyyy} {dias} DIAS";
+    }
+
+    /// <summary>
+    /// Gera CSV das férias no layout Sienge com obs
+    /// "REF. A FERIAS - NOME - PERIODO ini A fim dias DIAS".
+    /// </summary>
+    public static string GerarCsvFerias(
+        List<(int Centro, string Nome, decimal Valor, DateTime IniGozo, DateTime FimGozo, int Dias)> linhas,
+        string vencimento, string verba, string credorCodigo, string credorNome,
+        string competenciaDoc, string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "")
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var l in linhas)
+        {
+            var cc = l.Centro.ToString("D4");
+            var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
+            var per = PeriodoFerias(l.IniGozo, l.FimGozo, l.Dias);
+            var obs = string.IsNullOrEmpty(per) ? $"REF. A FERIAS - {l.Nome}" : $"REF. A FERIAS - {l.Nome} - {per}";
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{competenciaDoc};{obs}");
+        }
+        return sb.ToString();
     }
 
     /// <summary>

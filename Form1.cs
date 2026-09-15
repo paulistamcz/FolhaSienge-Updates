@@ -946,18 +946,37 @@ public partial class Form1 : Form
             {
                 if (analitico)
                 {
-                    var linhas = FiltrarPorCentro(
-                        tipo == 2
-                            ? svc.ListarFeriasAnalitica(_conn, ini, fim)
-                            : svc.ListarRescisaoAnalitica(_conn, ini, fim),
-                        x => x.Centro, centrosFiltro);
-                    if (linhas.Count == 0)
+                    List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)> linhas;
+                    if (tipo == 2)
                     {
-                        MessageBox.Show("Nenhum registro no período.", "Aviso",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
+                        // Férias: obs "REF. A FERIAS - NOME - PERIODO ini A fim dias DIAS".
+                        var linhasFer = FiltrarPorCentro(
+                            svc.ListarFeriasAnalitica(_conn, ini, fim),
+                            x => x.Centro, centrosFiltro);
+                        if (linhasFer.Count == 0)
+                        {
+                            MessageBox.Show("Nenhum registro no período.", "Aviso",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        _csvGeradoFolha = DbService.GerarCsvFerias(
+                            linhasFer.Select(x => (x.Centro, x.NomeEmpregado, x.Valor, x.IniGozo, x.FimGozo, x.Dias)).ToList(),
+                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento);
+                        linhas = linhasFer.Select(x => (x.Centro, x.NomeEmpregado, x.Empregado, x.Valor)).ToList();
                     }
-                    _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
+                    else
+                    {
+                        linhas = FiltrarPorCentro(
+                            svc.ListarRescisaoAnalitica(_conn, ini, fim),
+                            x => x.Centro, centrosFiltro);
+                        if (linhas.Count == 0)
+                        {
+                            MessageBox.Show("Nenhum registro no período.", "Aviso",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
+                    }
                     decimal total = linhas.Sum(x => x.Valor);
                     lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -976,21 +995,40 @@ public partial class Form1 : Form
                 }
                 else
                 {
-                    var centros = FiltrarPorCentro(
-                        tipo == 2
-                            ? svc.ResumoFeriasCentros(_conn, ini, fim)
-                            : svc.ResumoRescisaoCentros(_conn, ini, fim),
-                        x => x.Centro, centrosFiltro);
-                    if (centros.Count == 0)
+                    List<(int Centro, string Nome, int Empregados, decimal Total)> centros;
+                    if (tipo == 2)
                     {
-                        MessageBox.Show("Nenhum registro no período.", "Aviso",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
+                        // Férias por centro com período (menor início / maior fim do centro).
+                        var centrosFer = FiltrarPorCentro(
+                            svc.ResumoFeriasCentros(_conn, ini, fim),
+                            x => x.Centro, centrosFiltro);
+                        if (centrosFer.Count == 0)
+                        {
+                            MessageBox.Show("Nenhum registro no período.", "Aviso",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        _csvGeradoFolha = DbService.GerarCsvFerias(
+                            centrosFer.Select(c => (c.Centro, c.Nome, c.Total, c.IniGozo, c.FimGozo, c.Dias)).ToList(),
+                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento);
+                        centros = centrosFer.Select(c => (c.Centro, c.Nome, c.Empregados, c.Total)).ToList();
                     }
-                    var linhasCompletas = centros
-                        .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, credorCod, credorNome))
-                        .ToList();
-                    _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
+                    else
+                    {
+                        centros = FiltrarPorCentro(
+                            svc.ResumoRescisaoCentros(_conn, ini, fim),
+                            x => x.Centro, centrosFiltro);
+                        if (centros.Count == 0)
+                        {
+                            MessageBox.Show("Nenhum registro no período.", "Aviso",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        var linhasCompletas = centros
+                            .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, credorCod, credorNome))
+                            .ToList();
+                        _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
+                    }
                     decimal total = centros.Sum(x => x.Total);
                     lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -1040,8 +1078,12 @@ public partial class Form1 : Form
             {
                 // Lista analítica (por funcionário) para permitir seleção antes de agrupar por centro.
                 List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)> analiticas;
+                List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor, DateTime IniGozo, DateTime FimGozo, int Dias)>? feriasBase = null;
                 if (tipo == 2)
-                    analiticas = svc.ListarFeriasAnalitica(_conn, ini, fim);
+                {
+                    feriasBase = FiltrarPorCentro(svc.ListarFeriasAnalitica(_conn, ini, fim), x => x.Centro, centrosFiltro);
+                    analiticas = feriasBase.Select(x => (x.Centro, x.NomeEmpregado, x.Empregado, x.Valor)).ToList();
+                }
                 else if (tipo == 3)
                     analiticas = svc.ListarRescisaoAnalitica(_conn, ini, fim);
                 else
@@ -1092,7 +1134,23 @@ public partial class Form1 : Form
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
+                if (tipo == 2 && feriasBase != null)
+                {
+                    // Períodos de gozo por centro a partir das linhas de férias selecionadas.
+                    var lookupFer = feriasBase.ToLookup(x => (x.Empregado, x.Centro, x.Valor));
+                    var perCentro = analiticas
+                        .Select(a => lookupFer[(a.Empregado, a.Centro, a.Valor)].FirstOrDefault())
+                        .GroupBy(x => x.Centro)
+                        .ToDictionary(g => g.Key, g => (Ini: g.Min(x => x.IniGozo), Fim: g.Max(x => x.FimGozo), Dias: g.Sum(x => x.Dias)));
+                    _csvGeradoFolha = DbService.GerarCsvFerias(
+                        linhasCompletas.Select(l => {
+                            perCentro.TryGetValue(l.Centro, out var p);
+                            return (l.Centro, l.Nome, l.Total, p.Ini, p.Fim, p.Dias);
+                        }).ToList(),
+                        venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento);
+                }
+                else
+                    _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
                 decimal total = linhasCompletas.Sum(x => x.Total);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
