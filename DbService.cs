@@ -412,18 +412,19 @@ public class DbService
 
     /// <summary>
     /// Férias por empregado num período de pagamento (analítico).
-    /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa usando VALOR_REMUNERACAO.
+    /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa usando o
+    /// líquido (PROVENTOS − DESCONTOS), igual ao recibo do Domínio.
     /// </summary>
     public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
         ListarFeriasAnalitica(OdbcConnection conn, DateTime ini, DateTime fim)
     {
         var lista = new List<(int, string, int, decimal)>();
         using var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, TRIM(e.nome), f.I_EMPREGADOS, ROUND(f.VALOR_REMUNERACAO, 2) " +
+            "SELECT e.i_ccustos, TRIM(e.nome), f.I_EMPREGADOS, ROUND((f.PROVENTOS - f.DESCONTOS), 2) " +
             "FROM bethadba.FOFERIAS f " +
             "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
             "WHERE f.CODI_EMP = " + DbService.Empresa + " AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
-            "AND ROUND(f.VALOR_REMUNERACAO, 2) > 0 " +
+            "AND ROUND((f.PROVENTOS - f.DESCONTOS), 2) > 0 " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         cmd.Parameters.AddWithValue("ini", ini);
         cmd.Parameters.AddWithValue("fim", fim);
@@ -440,7 +441,7 @@ public class DbService
     }
 
     /// <summary>
-    /// Férias por centro (completo) num período de pagamento.
+    /// Férias por centro (completo) num período de pagamento (líquido = PROVENTOS − DESCONTOS).
     /// Retorna (Centro, Nome, Empregados, Total).
     /// </summary>
     public List<(int Centro, string Nome, int Empregados, decimal Total)>
@@ -448,12 +449,12 @@ public class DbService
     {
         var lista = new List<(int, string, int, decimal)>();
         using var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, c.nome, COUNT(*), ROUND(SUM(f.VALOR_REMUNERACAO), 2) " +
+            "SELECT e.i_ccustos, c.nome, COUNT(*), ROUND(SUM(f.PROVENTOS - f.DESCONTOS), 2) " +
             "FROM bethadba.FOFERIAS f " +
             "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
             "WHERE f.CODI_EMP = " + DbService.Empresa + " AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
-            "AND ROUND(f.VALOR_REMUNERACAO, 2) > 0 " +
+            "AND ROUND((f.PROVENTOS - f.DESCONTOS), 2) > 0 " +
             "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn);
         cmd.Parameters.AddWithValue("ini", ini);
         cmd.Parameters.AddWithValue("fim", fim);
