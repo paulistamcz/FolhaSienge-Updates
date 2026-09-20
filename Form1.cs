@@ -418,6 +418,10 @@ public partial class Form1 : Form
         mtbGrfIni.Text = ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
         mtbGrfFim.Text = venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
 
+        // Período próprio da tela da Folha (férias/rescisões): mesmo padrão mensal.
+        mtbFolhaIni.Text = ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+        mtbFolhaFim.Text = venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+
         // Data do lote: primeiro dia do mês
         mtbGrfLote.Text = ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
 
@@ -455,6 +459,27 @@ public partial class Form1 : Form
         // Ao mudar o centro na aba Folha, não faz nada automático; só informa o filtro.
     }
 
+    /// <summary>
+    /// Pede o mapeamento da coluna B (Domínio -&gt; Sienge) para os centros do lote.
+    /// Vem preenchido com o mapa salvo (ou o próprio centro) e grava ao confirmar.
+    /// Retorna false se o usuário cancelar (chamador deve abortar a geração).
+    /// </summary>
+    private bool PedirMapaCentros(IEnumerable<int> centros)
+    {
+        var svc = new DbService();
+        var lista = centros.Distinct().OrderBy(c => c)
+            .Select(c => (Centro: c, Nome: svc.NomeCentroCusto(_conn!, c)))
+            .ToList();
+        if (lista.Count == 0) return true;
+        var mapa = DbService.CarregarMapaCentros(DbService.Empresa);
+        using var dlg = new PromptMapeamento(lista, mapa, "Mapeamento coluna B - Domínio → Sienge");
+        if (dlg.ShowDialog(this) != DialogResult.OK) return false;
+        mapa = dlg.Mapa;
+        DbService.SalvarMapaCentros(DbService.Empresa, mapa);
+        DbService.MapaCentrosSienge = mapa;
+        return true;
+    }
+
     /// <summary>Exibe o CSV gerado no campo de visualização, forçando o redesenho imediato.</summary>
     private static void MostrarPrevia(TextBox txt, string texto)
     {
@@ -470,6 +495,10 @@ public partial class Form1 : Form
     /// <summary>Ao trocar o tipo de folha (mensal/quinzena/férias/rescisões), recarrega os centros.</summary>
     private void cmbFolhaTipo_SelectedIndexChanged(object sender, EventArgs e)
     {
+        // Período próprio da tela da Folha: só vale para Férias/Rescisões.
+        bool comPeriodo = cmbFolhaTipo.SelectedIndex >= 2;
+        mtbFolhaIni.Enabled = comPeriodo;
+        mtbFolhaFim.Enabled = comPeriodo;
         PreencherCentrosFolha();
     }
 
@@ -502,10 +531,10 @@ public partial class Form1 : Form
 
     private void AtualizarDocumento()
     {
-        // O documento (K) segue o formato: ddMM/competência (ex.: 18/08 + 06/2026 -> "1808/062026").
-        var comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
-        if (!string.IsNullOrEmpty(comp))
-            txtDoc.Text = DateTime.Now.ToString("ddMM") + "/" + comp.Replace("/", "");
+        // O documento (K) fica vazio = base automática RRRRVVVCCCDDMMAA na geração.
+        // Se o usuário digitar, usa o digitado (+ sequência se marcada).
+        txtDoc.Text = "";
+        txtDoc.PlaceholderText = "vazio = automático";
     }
 
     private void btnCarregarCentros_Click(object sender, EventArgs e)
@@ -870,9 +899,6 @@ public partial class Form1 : Form
         int tipo = cmbFolhaTipo.SelectedIndex;
         bool analitico = cmbFolhaModo.SelectedIndex == 1;
         string comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
-        string doc = string.IsNullOrWhiteSpace(txtDoc.Text.Trim())
-            ? comp.Replace("/", "")
-            : txtDoc.Text.Trim();
         string obs = txtObs.Text.Trim();
         // Código da verba (coluna A): numérico, conforme a tabela_financeira.
         // Folha Mensal/Quinzena = verba 1 (SALARIO/FOLHA), Férias = 3, Rescisão = 4.
@@ -890,16 +916,26 @@ public partial class Form1 : Form
         string credorNome = vVerba.Credor;
         string verba = codigoVerba.ToString();
 
-        // Férias e Rescisões usam período de pagamento/vencimento (mtbGrfIni/mtbGrfFim)
+        // Documento (K): o digitado, ou base automática RRRRVVVCCCDDMMAA
+        // (aleatório único por arquivo); a sequência por linha garante que
+        // nenhum documento se repita.
+        string doc = txtDoc.Text.Trim();
+        if (string.IsNullOrWhiteSpace(doc))
+        {
+            doc = DbService.GerarDocBase(codigoVerba, credorCod, DateTime.Now, Random.Shared.Next(1000, 10000));
+            txtDoc.Text = doc;
+        }
+
+        // Férias e Rescisões usam o período próprio da tela da Folha (mtbFolhaIni/mtbFolhaFim)
         DateTime ini, fim;
         if (tipo == 2 || tipo == 3)
         {
-            if (!DateTime.TryParseExact(mtbGrfIni.Text.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture,
+            if (!DateTime.TryParseExact(mtbFolhaIni.Text.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture,
                     DateTimeStyles.None, out ini) ||
-                !DateTime.TryParseExact(mtbGrfFim.Text.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture,
+                !DateTime.TryParseExact(mtbFolhaFim.Text.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture,
                     DateTimeStyles.None, out fim))
             {
-                MessageBox.Show("Período (GRRF) inválido. Use DD/MM/AAAA.", "Erro",
+                MessageBox.Show("Período (Folha) inválido. Use DD/MM/AAAA.", "Erro",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
@@ -947,22 +983,20 @@ public partial class Form1 : Form
                 if (analitico)
                 {
                     List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)> linhas;
+                    // Férias carrega os períodos para a obs; a seleção devolve 4 campos.
+                    List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor, DateTime IniGozo, DateTime FimGozo, int Dias)>? ferFull = null;
                     if (tipo == 2)
                     {
-                        // Férias: obs "REF. A FERIAS - NOME - PERIODO ini A fim dias DIAS".
-                        var linhasFer = FiltrarPorCentro(
+                        ferFull = FiltrarPorCentro(
                             svc.ListarFeriasAnalitica(_conn, ini, fim),
                             x => x.Centro, centrosFiltro);
-                        if (linhasFer.Count == 0)
+                        if (ferFull.Count == 0)
                         {
                             MessageBox.Show("Nenhum registro no período.", "Aviso",
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
                             return;
                         }
-                        _csvGeradoFolha = DbService.GerarCsvFerias(
-                            linhasFer.Select(x => (x.Centro, x.NomeEmpregado, x.Valor, x.IniGozo, x.FimGozo, x.Dias)).ToList(),
-                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento);
-                        linhas = linhasFer.Select(x => (x.Centro, x.NomeEmpregado, x.Empregado, x.Valor)).ToList();
+                        linhas = ferFull.Select(x => (x.Centro, x.NomeEmpregado, x.Empregado, x.Valor)).ToList();
                     }
                     else
                     {
@@ -975,7 +1009,38 @@ public partial class Form1 : Form
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
                             return;
                         }
-                        _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
+                    }
+                    // Seleção de funcionários (mostra Emp/Nome/Centro/Valor), igual ao completo.
+                    using (var sel = new SelecaoFuncionarios(
+                        linhas.Select(x => (x.Empregado, x.NomeEmpregado, x.Centro, x.Valor)).ToList(),
+                        $"Selecionar funcionários - {cmbFolhaTipo.SelectedItem}"))
+                    {
+                        if (sel.ShowDialog(this) != DialogResult.OK) return;
+                        var escolhidos = sel.Selecionados;
+                        if (escolhidos.Count == 0)
+                        {
+                            MessageBox.Show("Marque pelo menos um funcionário.", "Aviso",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        linhas = escolhidos.Select(s => (s.Centro, s.Nome, s.Empregado, s.Valor)).ToList();
+                    }
+                    if (tipo == 2 && ferFull != null)
+                    {
+                        // Recupera os períodos das linhas selecionadas.
+                        var lookupFer = ferFull.ToLookup(x => (x.Empregado, x.Centro, x.Valor));
+                        var comPer = linhas.Select(a => {
+                            var f = lookupFer[(a.Empregado, a.Centro, a.Valor)].FirstOrDefault();
+                            return (a.Centro, a.NomeEmpregado, a.Valor, f.IniGozo, f.FimGozo, f.Dias);
+                        }).ToList();
+                        if (!PedirMapaCentros(comPer.Select(x => x.Centro))) return;
+                        _csvGeradoFolha = DbService.GerarCsvFerias(comPer,
+                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked);
+                    }
+                    else
+                    {
+                        if (!PedirMapaCentros(linhas.Select(x => x.Centro))) return;
+                        _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked);
                     }
                     decimal total = linhas.Sum(x => x.Valor);
                     lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
@@ -1008,9 +1073,10 @@ public partial class Form1 : Form
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
                             return;
                         }
+                        if (!PedirMapaCentros(centrosFer.Select(c => c.Centro))) return;
                         _csvGeradoFolha = DbService.GerarCsvFerias(
                             centrosFer.Select(c => (c.Centro, c.Nome, c.Total, c.IniGozo, c.FimGozo, c.Dias)).ToList(),
-                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento);
+                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked);
                         centros = centrosFer.Select(c => (c.Centro, c.Nome, c.Empregados, c.Total)).ToList();
                     }
                     else
@@ -1027,7 +1093,7 @@ public partial class Form1 : Form
                         var linhasCompletas = centros
                             .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, credorCod, credorNome))
                             .ToList();
-                        _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
+                        _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked);
                     }
                     decimal total = centros.Sum(x => x.Total);
                     lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
@@ -1057,7 +1123,23 @@ public partial class Form1 : Form
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
+                // Seleção de funcionários (mostra Emp/Nome/Centro/Valor), igual ao completo.
+                using (var selFolha = new SelecaoFuncionarios(
+                    linhas.Select(x => (x.Empregado, x.NomeEmpregado, x.Centro, x.Liquido)).ToList(),
+                    $"Selecionar funcionários - {cmbFolhaTipo.SelectedItem}"))
+                {
+                    if (selFolha.ShowDialog(this) != DialogResult.OK) return;
+                    var escolhidosFolha = selFolha.Selecionados;
+                    if (escolhidosFolha.Count == 0)
+                    {
+                        MessageBox.Show("Marque pelo menos um funcionário.", "Aviso",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    linhas = escolhidosFolha.Select(s => (s.Centro, s.Nome, s.Empregado, s.Valor)).ToList();
+                }
+                if (!PedirMapaCentros(linhas.Select(x => x.Centro))) return;
+                _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked);
                 decimal total = linhas.Sum(x => x.Liquido);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -1134,6 +1216,7 @@ public partial class Form1 : Form
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
+                if (!PedirMapaCentros(linhasCompletas.Select(x => x.Centro))) return;
                 if (tipo == 2 && feriasBase != null)
                 {
                     // Períodos de gozo por centro a partir das linhas de férias selecionadas.
@@ -1147,10 +1230,10 @@ public partial class Form1 : Form
                             perCentro.TryGetValue(l.Centro, out var p);
                             return (l.Centro, l.Nome, l.Total, p.Ini, p.Fim, p.Dias);
                         }).ToList(),
-                        venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento);
+                        venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked);
                 }
                 else
-                    _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs);
+                    _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked);
                 decimal total = linhasCompletas.Sum(x => x.Total);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 

@@ -80,6 +80,11 @@ partial class Form1
     private Label lblTotalFolha;
     private DataGridView dgvFolha;
     private TextBox txtResultadoFolha;
+    private Label lblFolhaPeriodo;
+    private MaskedTextBox mtbFolhaIni;
+    private Label lblFolhaAte;
+    private MaskedTextBox mtbFolhaFim;
+    private CheckBox chkDocSeq;
 
     private GroupBox grpGuias;
     private Label lblGuiasTipo;
@@ -164,6 +169,11 @@ partial class Form1
         this.lblTotalFolha = new Label();
         this.dgvFolha = new DataGridView();
         this.txtResultadoFolha = new TextBox();
+        this.lblFolhaPeriodo = new Label();
+        this.mtbFolhaIni = new MaskedTextBox();
+        this.lblFolhaAte = new Label();
+        this.mtbFolhaFim = new MaskedTextBox();
+        this.chkDocSeq = new CheckBox();
         this.grpGuias = new GroupBox();
         this.lblGuiasTipo = new Label();
         this.cmbGuiasTipo = new ComboBox();
@@ -475,7 +485,7 @@ partial class Form1
         this.txtDoc.Name = "txtDoc";
         this.txtDoc.Size = new System.Drawing.Size(100, 23);
         this.txtDoc.TabIndex = 5;
-        this.txtDoc.Text = "122025";
+        this.txtDoc.PlaceholderText = "vazio = automático";
         // 
         // lblObs
         // 
@@ -587,6 +597,11 @@ partial class Form1
         this.grpFolha.Controls.Add(this.lblTotalFolha);
         this.grpFolha.Controls.Add(this.dgvFolha);
         this.grpFolha.Controls.Add(this.txtResultadoFolha);
+        this.grpFolha.Controls.Add(this.lblFolhaPeriodo);
+        this.grpFolha.Controls.Add(this.mtbFolhaIni);
+        this.grpFolha.Controls.Add(this.lblFolhaAte);
+        this.grpFolha.Controls.Add(this.mtbFolhaFim);
+        this.grpFolha.Controls.Add(this.chkDocSeq);
         this.grpFolha.Dock = System.Windows.Forms.DockStyle.Fill;
         this.grpFolha.Location = new System.Drawing.Point(3, 3);
         this.grpFolha.Name = "grpFolha";
@@ -647,9 +662,57 @@ partial class Form1
         this.cmbFolhaCentro.Size = new System.Drawing.Size(150, 23);
         this.cmbFolhaCentro.TabIndex = 31;
         this.cmbFolhaCentro.SelectedIndexChanged += new EventHandler(this.cmbFolhaCentro_SelectedIndexChanged);
-        // 
+        //
+        // lblFolhaPeriodo
+        //
+        this.lblFolhaPeriodo.AutoSize = true;
+        this.lblFolhaPeriodo.Location = new System.Drawing.Point(16, 58);
+        this.lblFolhaPeriodo.Name = "lblFolhaPeriodo";
+        this.lblFolhaPeriodo.Size = new System.Drawing.Size(70, 15);
+        this.lblFolhaPeriodo.TabIndex = 32;
+        this.lblFolhaPeriodo.Text = "Período de:";
+        //
+        // mtbFolhaIni
+        //
+        this.mtbFolhaIni.Enabled = false;
+        this.mtbFolhaIni.Location = new System.Drawing.Point(92, 54);
+        this.mtbFolhaIni.Mask = "00/00/0000";
+        this.mtbFolhaIni.Name = "mtbFolhaIni";
+        this.mtbFolhaIni.Size = new System.Drawing.Size(80, 23);
+        this.mtbFolhaIni.TabIndex = 33;
+        //
+        // lblFolhaAte
+        //
+        this.lblFolhaAte.AutoSize = true;
+        this.lblFolhaAte.Location = new System.Drawing.Point(178, 58);
+        this.lblFolhaAte.Name = "lblFolhaAte";
+        this.lblFolhaAte.Size = new System.Drawing.Size(26, 15);
+        this.lblFolhaAte.TabIndex = 34;
+        this.lblFolhaAte.Text = "até:";
+        //
+        // mtbFolhaFim
+        //
+        this.mtbFolhaFim.Enabled = false;
+        this.mtbFolhaFim.Location = new System.Drawing.Point(206, 54);
+        this.mtbFolhaFim.Mask = "00/00/0000";
+        this.mtbFolhaFim.Name = "mtbFolhaFim";
+        this.mtbFolhaFim.Size = new System.Drawing.Size(80, 23);
+        this.mtbFolhaFim.TabIndex = 35;
+        //
+        // chkDocSeq
+        //
+        this.chkDocSeq.AutoSize = true;
+        this.chkDocSeq.Checked = true;
+        this.chkDocSeq.CheckState = CheckState.Checked;
+        this.chkDocSeq.Location = new System.Drawing.Point(296, 56);
+        this.chkDocSeq.Name = "chkDocSeq";
+        this.chkDocSeq.Size = new System.Drawing.Size(210, 19);
+        this.chkDocSeq.TabIndex = 36;
+        this.chkDocSeq.Text = "Numerar docs (nome 1, 2, 3...)";
+        this.chkDocSeq.UseVisualStyleBackColor = true;
+        //
         // btnGerarFolha
-        // 
+        //
         this.btnGerarFolha.Enabled = false;
         this.btnGerarFolha.Location = new System.Drawing.Point(680, 20);
         this.btnGerarFolha.Name = "btnGerarFolha";

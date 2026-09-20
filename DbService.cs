@@ -1,5 +1,6 @@
 using System.Data.Odbc;
 using System.Globalization;
+using System.IO;
 
 namespace FolhaSienge;
 
@@ -10,6 +11,68 @@ public class DbService
 
     /// <summary>Empresa (codi_emp) selecionada no app. Usada em todas as consultas.</summary>
     public static int Empresa = 1;
+
+    /// <summary>Mapeamento da coluna B (centro Domínio -&gt; obra Sienge), informado a cada geração.</summary>
+    public static Dictionary<int, int> MapaCentrosSienge { get; set; } = new();
+
+    /// <summary>Centro a gravar na coluna B: o mapeado, ou o original se não houver mapa.</summary>
+    public static int CentroCsv(int centro) =>
+        MapaCentrosSienge.TryGetValue(centro, out var s) && s > 0 ? s : centro;
+
+    /// <summary>Arquivo do mapeamento DE-PARA ao lado do executável (DOMINIO;SIENGE).</summary>
+    public static string ArquivoMapaCentros =>
+        Path.Combine(AppContext.BaseDirectory, "mapeamento_centros.csv");
+
+    /// <summary>Lê o mapeamento DE-PARA do disco para a empresa (vazio = identidade).</summary>
+    public static Dictionary<int, int> CarregarMapaCentros(int empresa)
+    {
+        var mapa = new Dictionary<int, int>();
+        try
+        {
+            var arq = ArquivoMapaCentros;
+            if (!File.Exists(arq)) return mapa;
+            foreach (var lin in File.ReadAllLines(arq))
+            {
+                var p = lin.Split(';');
+                if (p.Length < 3) continue;
+                if (int.TryParse(p[0].Trim(), out var emp) && emp == empresa &&
+                    int.TryParse(p[1].Trim(), out var de) && int.TryParse(p[2].Trim(), out var para) && para > 0)
+                    mapa[de] = para;
+            }
+        }
+        catch { }
+        return mapa;
+    }
+
+    /// <summary>Grava o mapeamento DE-PARA da empresa no disco (mantém as demais).</summary>
+    public static void SalvarMapaCentros(int empresa, Dictionary<int, int> mapa)
+    {
+        try
+        {
+            var todos = new Dictionary<(int Emp, int De), int>();
+            var arq = ArquivoMapaCentros;
+            if (File.Exists(arq))
+            {
+                foreach (var lin in File.ReadAllLines(arq))
+                {
+                    var p = lin.Split(';');
+                    if (p.Length < 3) continue;
+                    if (int.TryParse(p[0].Trim(), out var emp) &&
+                        int.TryParse(p[1].Trim(), out var de) && int.TryParse(p[2].Trim(), out var para) && para > 0)
+                        todos[(emp, de)] = para;
+                }
+            }
+            foreach (var k in todos.Keys.Where(k => k.Emp == empresa).ToList())
+                todos.Remove(k);
+            foreach (var kv in mapa)
+                if (kv.Value > 0) todos[(empresa, kv.Key)] = kv.Value;
+            var linhas = new List<string> { "EMPRESA;DOMINIO;SIENGE" };
+            linhas.AddRange(todos.OrderBy(k => k.Key.Emp).ThenBy(k => k.Key.De)
+                .Select(k => $"{k.Key.Emp};{k.Key.De};{k.Value}"));
+            File.WriteAllLines(arq, linhas);
+        }
+        catch { }
+    }
 
     public static readonly string[] EnginesCandidatos =
     {
@@ -331,16 +394,28 @@ public class DbService
         return lista;
     }
 
+    /// <summary>
+    /// Monta a base do documento (coluna K): RRRRVVVCCCDDMMAA = 4 aleatórios +
+    /// verba (D3) + credor numérico (D3) + data (ddMMyy). Ex.: 3249001001200926.
+    /// O aleatório é único por arquivo; a sequência por linha garante a unicidade.
+    /// </summary>
+    public static string GerarDocBase(int verba, string credorCodigo, DateTime data, int aleatorio)
+    {
+        int credor = int.TryParse((credorCodigo ?? "").Trim(), out var c) && c >= 0 ? c : 0;
+        return $"{aleatorio:0000}{verba:D3}{credor:D3}{data:ddMMyy}";
+    }
+
     public static string GerarCsv(
         List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)> linhas,
         string vencimento, string verba, string competenciaDoc, string observacao = "",
-        string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "")
+        string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "",
+        bool numerarDoc = false)
     {
         var sb = new System.Text.StringBuilder();
         int i = 1;
         foreach (var l in linhas)
         {
-            var cc = l.Centro.ToString("D4");
+            var cc = CentroCsv(l.Centro).ToString("D4");
             var credorCodigo = string.IsNullOrWhiteSpace(l.CredorCodigo) ? $"CRED{i:D2}" : l.CredorCodigo;
             var credorNome = string.IsNullOrWhiteSpace(l.CredorNome) ? l.Nome : l.CredorNome;
             var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
@@ -348,7 +423,8 @@ public class DbService
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.Nome : $"{observacao} - {l.Nome}";
             // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
             if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{competenciaDoc};{obs}");
+            var docLinha = numerarDoc ? $"{competenciaDoc} {i}" : competenciaDoc;
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{docLinha};{obs}");
             i++;
         }
         return sb.ToString();
@@ -395,17 +471,21 @@ public class DbService
         List<(int Centro, string NomeEmpregado, int Empregado, decimal Liquido)> linhas,
         string vencimento, string verba, string credorCodigo, string credorNome,
         string competenciaDoc, string observacao = "",
-        string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "")
+        string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "",
+        bool numerarDoc = false)
     {
         var sb = new System.Text.StringBuilder();
+        int i = 1;
         foreach (var l in linhas)
         {
-            var cc = l.Centro.ToString("D4");
+            var cc = CentroCsv(l.Centro).ToString("D4");
             var valor = l.Liquido.ToString("0.00", CultureInfo.InvariantCulture);
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.NomeEmpregado : observacao + " - " + l.NomeEmpregado;
             // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
             if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{competenciaDoc};{obs}");
+            var docLinha = numerarDoc ? $"{competenciaDoc} {i}" : competenciaDoc;
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{docLinha};{obs}");
+            i++;
         }
         return sb.ToString();
     }
@@ -493,16 +573,20 @@ public class DbService
     public static string GerarCsvFerias(
         List<(int Centro, string Nome, decimal Valor, DateTime IniGozo, DateTime FimGozo, int Dias)> linhas,
         string vencimento, string verba, string credorCodigo, string credorNome,
-        string competenciaDoc, string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "")
+        string competenciaDoc, string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "",
+        bool numerarDoc = false)
     {
         var sb = new System.Text.StringBuilder();
+        int i = 1;
         foreach (var l in linhas)
         {
-            var cc = l.Centro.ToString("D4");
+            var cc = CentroCsv(l.Centro).ToString("D4");
             var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
             var per = PeriodoFerias(l.IniGozo, l.FimGozo, l.Dias);
             var obs = string.IsNullOrEmpty(per) ? $"REF. A FERIAS - {l.Nome}" : $"REF. A FERIAS - {l.Nome} - {per}";
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{competenciaDoc};{obs}");
+            var docLinha = numerarDoc ? $"{competenciaDoc} {i}" : competenciaDoc;
+            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{docLinha};{obs}");
+            i++;
         }
         return sb.ToString();
     }
