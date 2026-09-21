@@ -472,12 +472,106 @@ public partial class Form1 : Form
             .ToList();
         if (lista.Count == 0) return true;
         var mapa = DbService.CarregarMapaCentros(DbService.Empresa);
-        using var dlg = new PromptMapeamento(lista, mapa, "Mapeamento coluna B - Domínio → Sienge");
+        // Sugestões automáticas (espelho) para centros sem mapa salvo.
+        var sugeridos = new Dictionary<int, int>();
+        try
+        {
+            var falta = lista.Where(c => !mapa.ContainsKey(c.Centro)).ToList();
+            if (falta.Count > 0)
+            {
+                var (_, obrasEsp) = SiengeApi.CarregarEspelhoObras();
+                if (obrasEsp.Count > 0)
+                    sugeridos = SiengeApi.SugerirMapa(
+                        falta.Select(c => (c.Centro, c.Nome)).ToList(),
+                        obrasEsp.Select(o => (o.Codigo, o.Nome, o.Empresa)).ToList(),
+                        DbService.Empresa);
+            }
+        }
+        catch { }
+        var svc2 = new DbService();
+        var conn2 = _conn;
+        using var dlg = new PromptMapeamento(lista, mapa, "Mapeamento coluna B - Domínio → Sienge",
+            DbService.Empresa, () => svc2.DadosCentrosDominio(conn2!), sugeridos);
         if (dlg.ShowDialog(this) != DialogResult.OK) return false;
         mapa = dlg.Mapa;
         DbService.SalvarMapaCentros(DbService.Empresa, mapa);
         DbService.MapaCentrosSienge = mapa;
+        Logger.LogUso("MAPA_B", string.Join("|", mapa.OrderBy(k => k.Key).Select(k => $"{k.Key}->{k.Value}")));
         return true;
+    }
+
+    /// <summary>Abre o relatório Domínio x Sienge da empresa atual.</summary>
+    private void btnRelatorioDomSien_Click(object? sender, EventArgs e)
+    {
+        if (_conn == null)
+        {
+            MessageBox.Show("Conecte ao banco primeiro.", "Aviso",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        Cursor = Cursors.WaitCursor;
+        try
+        {
+            var dados = new DbService().DadosCentrosDominio(_conn);
+            var mapa = DbService.CarregarMapaCentros(DbService.Empresa);
+            using var rep = new RelatorioDominioSienge(dados, DbService.Empresa, mapa);
+            rep.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Falha ao montar relatório:\n\n" + ex.Message,
+                "Relatório", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+    }
+
+    /// <summary>
+    /// Monta as linhas da grade de apropriação (B do mapa + G/H/I/J informados,
+    /// ou os lembrados quando vazios).
+    /// </summary>
+    private static List<LinhaApropriacao> MontarGradeApropriacao(
+        IEnumerable<(int Indice, string Desc, int Centro, decimal Valor)> src,
+        string gInf = "", string hInf = "", string iInf = "", string jInf = "")
+    {
+        var (g0, h0, i0, j0) = PromptApropriacao.CarregarUltima();
+        if (gInf == "" && hInf == "" && iInf == "" && jInf == "")
+        {
+            gInf = g0;
+            hInf = h0;
+            iInf = i0;
+            jInf = j0;
+        }
+        return src.Select(s => new LinhaApropriacao
+        {
+            Indice = s.Indice,
+            Descricao = s.Desc,
+            Centro = s.Centro,
+            Valor = s.Valor,
+            B = DbService.CentroCsv(s.Centro),
+            G = gInf,
+            H = hInf,
+            I = iInf,
+            J = jInf,
+            Sel = true
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Exibe a grade de apropriação (seleção + G/H/I/J por linha) e grava os
+    /// lembrados. Retorna as linhas marcadas ou null (cancelar/vazio).
+    /// </summary>
+    private List<LinhaApropriacao>? ExibirGradeApropriacao(List<LinhaApropriacao> grade, string titulo)
+    {
+        using var dlg = new PromptApropriacaoLinhas(grade, titulo);
+        if (dlg.ShowDialog(this) != DialogResult.OK) return null;
+        var sel = grade.Where(r => r.Sel).ToList();
+        if (sel.Count == 0) return null;
+        var prim = sel[0];
+        PromptApropriacao.SalvarUltima(prim.G, prim.H, prim.I, prim.J);
+        return sel;
     }
 
     /// <summary>Exibe o CSV gerado no campo de visualização, forçando o redesenho imediato.</summary>
@@ -966,16 +1060,29 @@ public partial class Form1 : Form
             if (cmbFolhaCentro.SelectedItem is ComboCentro cc && cc.Codigo > 0)
                 centrosFiltro = new HashSet<int> { cc.Codigo };
 
-            // Pedir dados de apropriação (obra G, unidade H, item I, departamento J) ao gerar
+            // Apropriação manual primeiro (vira o padrão das linhas da grade).
             string obra = "", unidade = "", itemOrc = "", departamento = "";
-            using (var dlg = new PromptApropriacao("Apropriação - Folha / Férias / Rescisões"))
+            using (var dlgAprop = new PromptApropriacao("Apropriação - Folha / Férias / Rescisões"))
             {
-                if (dlg.ShowDialog(this) != DialogResult.OK)
+                if (dlgAprop.ShowDialog(this) != DialogResult.OK)
                     return;
-                obra = dlg.Obra;
-                unidade = dlg.Unidade;
-                itemOrc = dlg.Item;
-                departamento = dlg.Departamento;
+                obra = dlgAprop.Obra;
+                unidade = dlgAprop.Unidade;
+                itemOrc = dlgAprop.Item;
+                departamento = dlgAprop.Departamento;
+                PromptApropriacao.SalvarUltima(obra, unidade, itemOrc, departamento);
+                Logger.LogUso("APROPRIACAO", $"G={obra};H={unidade};I={itemOrc};J={departamento}");
+            }
+
+            // Credor (coluna C/D): confirma/edita com o Sienge antes de gerar.
+            using (var dlgCred = new PromptCredor(codigoVerba, credorCod, credorNome))
+            {
+                if (dlgCred.ShowDialog(this) != DialogResult.OK)
+                    return;
+                credorCod = dlgCred.Codigo;
+                credorNome = dlgCred.NomeFinal;
+                PromptCredor.SalvarOverride(codigoVerba, credorCod);
+                Logger.LogUso("CREDOR", $"verba={codigoVerba};cod={credorCod};nome={credorNome}");
             }
 
             if (tipo == 2 || tipo == 3)
@@ -983,7 +1090,7 @@ public partial class Form1 : Form
                 if (analitico)
                 {
                     List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)> linhas;
-                    // Férias carrega os períodos para a obs; a seleção devolve 4 campos.
+                    // Férias carrega os períodos para a obs.
                     List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor, DateTime IniGozo, DateTime FimGozo, int Dias)>? ferFull = null;
                     if (tipo == 2)
                     {
@@ -1010,37 +1117,30 @@ public partial class Form1 : Form
                             return;
                         }
                     }
-                    // Seleção de funcionários (mostra Emp/Nome/Centro/Valor), igual ao completo.
-                    using (var sel = new SelecaoFuncionarios(
-                        linhas.Select(x => (x.Empregado, x.NomeEmpregado, x.Centro, x.Valor)).ToList(),
-                        $"Selecionar funcionários - {cmbFolhaTipo.SelectedItem}"))
-                    {
-                        if (sel.ShowDialog(this) != DialogResult.OK) return;
-                        var escolhidos = sel.Selecionados;
-                        if (escolhidos.Count == 0)
-                        {
-                            MessageBox.Show("Marque pelo menos um funcionário.", "Aviso",
-                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                            return;
-                        }
-                        linhas = escolhidos.Select(s => (s.Centro, s.Nome, s.Empregado, s.Valor)).ToList();
-                    }
+                    if (!PedirMapaCentros(linhas.Select(x => x.Centro))) return;
+                    // Grade única: seleção + G/H/I/J por linha (pré-preenchidos).
+                    var grade = MontarGradeApropriacao(linhas.Select((x, i) =>
+                        (Indice: i, Desc: $"{x.Empregado} - {x.NomeEmpregado}", x.Centro, x.Valor)));
+                    var sel = ExibirGradeApropriacao(grade, $"Apropriação - {cmbFolhaTipo.SelectedItem}");
+                    if (sel == null) return;
+                    var ap = sel.Select(r => (G: r.G, H: r.H, I: r.I, J: r.J)).ToList();
                     if (tipo == 2 && ferFull != null)
                     {
-                        // Recupera os períodos das linhas selecionadas.
-                        var lookupFer = ferFull.ToLookup(x => (x.Empregado, x.Centro, x.Valor));
-                        var comPer = linhas.Select(a => {
-                            var f = lookupFer[(a.Empregado, a.Centro, a.Valor)].FirstOrDefault();
-                            return (a.Centro, a.NomeEmpregado, a.Valor, f.IniGozo, f.FimGozo, f.Dias);
+                        var comPer = sel.Select(r => {
+                            var f = ferFull[r.Indice];
+                            return (f.Centro, f.NomeEmpregado, f.Valor, f.IniGozo, f.FimGozo, f.Dias);
                         }).ToList();
-                        if (!PedirMapaCentros(comPer.Select(x => x.Centro))) return;
                         _csvGeradoFolha = DbService.GerarCsvFerias(comPer,
-                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked);
+                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap);
+                        linhas = sel.Select(r => {
+                            var f = ferFull[r.Indice];
+                            return (f.Centro, f.NomeEmpregado, f.Empregado, f.Valor);
+                        }).ToList();
                     }
                     else
                     {
-                        if (!PedirMapaCentros(linhas.Select(x => x.Centro))) return;
-                        _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked);
+                        linhas = sel.Select(r => linhas[r.Indice]).ToList();
+                        _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap);
                     }
                     decimal total = linhas.Sum(x => x.Valor);
                     lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
@@ -1061,6 +1161,7 @@ public partial class Form1 : Form
                 else
                 {
                     List<(int Centro, string Nome, int Empregados, decimal Total)> centros;
+                    List<(int Centro, string Nome, int Empregados, decimal Total, DateTime IniGozo, DateTime FimGozo, int Dias)>? centrosFer7 = null;
                     if (tipo == 2)
                     {
                         // Férias por centro com período (menor início / maior fim do centro).
@@ -1073,10 +1174,7 @@ public partial class Form1 : Form
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
                             return;
                         }
-                        if (!PedirMapaCentros(centrosFer.Select(c => c.Centro))) return;
-                        _csvGeradoFolha = DbService.GerarCsvFerias(
-                            centrosFer.Select(c => (c.Centro, c.Nome, c.Total, c.IniGozo, c.FimGozo, c.Dias)).ToList(),
-                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked);
+                        centrosFer7 = centrosFer;
                         centros = centrosFer.Select(c => (c.Centro, c.Nome, c.Empregados, c.Total)).ToList();
                     }
                     else
@@ -1090,10 +1188,34 @@ public partial class Form1 : Form
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
                             return;
                         }
-                        var linhasCompletas = centros
+                    }
+                    if (!PedirMapaCentros(centros.Select(x => x.Centro))) return;
+                    // Grade única: seleção + G/H/I/J por centro (pré-preenchidos).
+                    var grade = MontarGradeApropriacao(centros.Select((x, i) =>
+                        (Indice: i, Desc: $"{x.Centro:D4} - {x.Nome}", x.Centro, x.Total)));
+                    var sel = ExibirGradeApropriacao(grade, $"Apropriação - {cmbFolhaTipo.SelectedItem}");
+                    if (sel == null) return;
+                    var ap = sel.Select(r => (G: r.G, H: r.H, I: r.I, J: r.J)).ToList();
+                    List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)> linhasCompletas;
+                    if (tipo == 2 && centrosFer7 != null)
+                    {
+                        var sub = sel.Select(r => centrosFer7[r.Indice]).ToList();
+                        var comPer = sub.Select(c => (c.Centro, c.Nome, c.Total, c.IniGozo, c.FimGozo, c.Dias)).ToList();
+                        _csvGeradoFolha = DbService.GerarCsvFerias(comPer,
+                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap);
+                        centros = sub.Select(c => (c.Centro, c.Nome, c.Empregados, c.Total)).ToList();
+                        linhasCompletas = centros
                             .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, credorCod, credorNome))
                             .ToList();
-                        _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked);
+                    }
+                    else
+                    {
+                        var sub = sel.Select(r => centros[r.Indice]).ToList();
+                        linhasCompletas = sub
+                            .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, credorCod, credorNome))
+                            .ToList();
+                        _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap);
+                        centros = sub;
                     }
                     decimal total = centros.Sum(x => x.Total);
                     lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
@@ -1114,32 +1236,26 @@ public partial class Form1 : Form
             }
             else if (analitico)
             {
-                var linhas = FiltrarPorCentro(
+                var linhas0 = FiltrarPorCentro(
                     svc.ListarFolhaAnalitica(_conn, comp, tipoProcess),
                     x => x.Centro, centrosFiltro);
-                if (linhas.Count == 0)
+                if (linhas0.Count == 0)
                 {
                     MessageBox.Show("Nenhum empregado com líquido nesta competência.", "Aviso",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                // Seleção de funcionários (mostra Emp/Nome/Centro/Valor), igual ao completo.
-                using (var selFolha = new SelecaoFuncionarios(
-                    linhas.Select(x => (x.Empregado, x.NomeEmpregado, x.Centro, x.Liquido)).ToList(),
-                    $"Selecionar funcionários - {cmbFolhaTipo.SelectedItem}"))
-                {
-                    if (selFolha.ShowDialog(this) != DialogResult.OK) return;
-                    var escolhidosFolha = selFolha.Selecionados;
-                    if (escolhidosFolha.Count == 0)
-                    {
-                        MessageBox.Show("Marque pelo menos um funcionário.", "Aviso",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
-                    }
-                    linhas = escolhidosFolha.Select(s => (s.Centro, s.Nome, s.Empregado, s.Valor)).ToList();
-                }
-                if (!PedirMapaCentros(linhas.Select(x => x.Centro))) return;
-                _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked);
+                if (!PedirMapaCentros(linhas0.Select(x => x.Centro))) return;
+                // Grade única: seleção + G/H/I/J por funcionário (pré-preenchidos).
+                var grade = MontarGradeApropriacao(linhas0.Select((x, i) =>
+                    (Indice: i, Desc: $"{x.Empregado} - {x.NomeEmpregado}", x.Centro, x.Liquido)));
+                var sel = ExibirGradeApropriacao(grade, $"Apropriação - {cmbFolhaTipo.SelectedItem}");
+                if (sel == null) return;
+                var ap = sel.Select(r => (G: r.G, H: r.H, I: r.I, J: r.J)).ToList();
+                var linhas = sel.Select(r => linhas0[r.Indice]).ToList();
+                _csvGeradoFolha = DbService.GerarCsvAnalitico(
+                    linhas.Select(x => (x.Centro, x.NomeEmpregado, x.Empregado, x.Liquido)).ToList(),
+                    venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap);
                 decimal total = linhas.Sum(x => x.Liquido);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -1181,21 +1297,6 @@ public partial class Form1 : Form
                     return;
                 }
 
-                using (var sel = new SelecaoFuncionarios(
-                    analiticas.Select(x => (x.Empregado, x.NomeEmpregado, x.Centro, x.Valor)).ToList(),
-                    $"Selecionar funcionários - {cmbFolhaTipo.SelectedItem}"))
-                {
-                    if (sel.ShowDialog(this) != DialogResult.OK) return;
-                    var escolhidos = sel.Selecionados;
-                    if (escolhidos.Count == 0)
-                    {
-                        MessageBox.Show("Marque pelo menos um funcionário.", "Aviso",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
-                    }
-                    analiticas = escolhidos.Select(s => (s.Centro, s.Nome, s.Empregado, s.Valor)).ToList();
-                }
-
                 var agrupados = analiticas
                     .GroupBy(x => x.Centro)
                     .OrderBy(g => g.Key)
@@ -1203,7 +1304,7 @@ public partial class Form1 : Form
                     .ToList();
                 if (agrupados.Count == 0)
                 {
-                    MessageBox.Show("Nenhum valor na seleção.", "Aviso",
+                    MessageBox.Show("Nenhum valor no período.", "Aviso",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
@@ -1217,23 +1318,37 @@ public partial class Form1 : Form
                     return;
                 }
                 if (!PedirMapaCentros(linhasCompletas.Select(x => x.Centro))) return;
+                // Períodos de gozo por centro (férias), calculados sobre todas as linhas.
+                Dictionary<int, (DateTime Ini, DateTime Fim, int Dias)>? perCentro = null;
                 if (tipo == 2 && feriasBase != null)
                 {
-                    // Períodos de gozo por centro a partir das linhas de férias selecionadas.
                     var lookupFer = feriasBase.ToLookup(x => (x.Empregado, x.Centro, x.Valor));
-                    var perCentro = analiticas
+                    perCentro = analiticas
                         .Select(a => lookupFer[(a.Empregado, a.Centro, a.Valor)].FirstOrDefault())
                         .GroupBy(x => x.Centro)
                         .ToDictionary(g => g.Key, g => (Ini: g.Min(x => x.IniGozo), Fim: g.Max(x => x.FimGozo), Dias: g.Sum(x => x.Dias)));
+                }
+                // Grade única: seleção + G/H/I/J por centro (pré-preenchidos).
+                var grade = MontarGradeApropriacao(linhasCompletas.Select((x, i) =>
+                    (Indice: i, Desc: $"{x.Centro:D4} - {x.Nome}", x.Centro, x.Total)));
+                var sel = ExibirGradeApropriacao(grade, $"Apropriação - {cmbFolhaTipo.SelectedItem}");
+                if (sel == null) return;
+                var ap = sel.Select(r => (G: r.G, H: r.H, I: r.I, J: r.J)).ToList();
+                var sub = sel.Select(r => linhasCompletas[r.Indice]).ToList();
+                if (tipo == 2 && perCentro != null)
+                {
                     _csvGeradoFolha = DbService.GerarCsvFerias(
-                        linhasCompletas.Select(l => {
+                        sub.Select(l => {
                             perCentro.TryGetValue(l.Centro, out var p);
                             return (l.Centro, l.Nome, l.Total, p.Ini, p.Fim, p.Dias);
                         }).ToList(),
-                        venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked);
+                        venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap);
                 }
                 else
-                    _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked);
+                    _csvGeradoFolha = DbService.GerarCsv(
+                        sub.Select(l => (l.Centro, l.Nome, l.Empregados, l.Total, credorCod, credorNome)).ToList(),
+                        venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap);
+                linhasCompletas = sub;
                 decimal total = linhasCompletas.Sum(x => x.Total);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -1251,6 +1366,9 @@ public partial class Form1 : Form
                 dgvFolha.Columns["Total"].DefaultCellStyle.Format = "N2";
             }
 
+            int nLinhasFolha = _csvGeradoFolha.Split('\n').Count(l => l.Trim() != "");
+            Logger.LogUso("GERAR_CSV_FOLHA",
+                $"tipo={cmbFolhaTipo.SelectedItem};modo={(analitico ? "analitico" : "completo")};comp={comp};linhas={nLinhasFolha};doc={doc}");
             MostrarPrevia(txtResultadoFolha, _csvGeradoFolha);
             btnSalvarFolha.Enabled = true;
         }
@@ -1308,15 +1426,17 @@ public partial class Form1 : Form
 
         // Pedir dados de apropriação (obra G, unidade H, item I, departamento J) ao gerar
         string obra = "", unidade = "", itemOrc = "", departamento = "";
-        using (var dlg = new PromptApropriacao("Apropriação - Guias"))
-        {
-            if (dlg.ShowDialog(this) != DialogResult.OK)
-                return;
-            obra = dlg.Obra;
-            unidade = dlg.Unidade;
-            itemOrc = dlg.Item;
-            departamento = dlg.Departamento;
-        }
+            using (var dlg = new PromptApropriacao("Apropriação - Guias"))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK)
+                    return;
+                obra = dlg.Obra;
+                unidade = dlg.Unidade;
+                itemOrc = dlg.Item;
+                departamento = dlg.Departamento;
+                PromptApropriacao.SalvarUltima(obra, unidade, itemOrc, departamento);
+                Logger.LogUso("APROPRIACAO_GUIAS", $"G={obra};H={unidade};I={itemOrc};J={departamento}");
+            }
 
         Cursor = Cursors.WaitCursor;
         try
@@ -1326,6 +1446,8 @@ public partial class Form1 : Form
 
             // Código/nome do credor por tipo (tabela_financeira)
             string descricao = cmbGuiasTipo.SelectedItem?.ToString() ?? "INSS";
+            // Coluna A: código numérico da verba (IRRF sai como 010, não texto).
+            string verbaGuia = descricao.ToUpperInvariant() == "IRRF" ? "010" : descricao;
             string codCredor, nomeCredor;
             switch (descricao.ToUpperInvariant())
             {
@@ -1375,7 +1497,7 @@ public partial class Form1 : Form
                 {
                     var cc = l.Centro.ToString("D4");
                     var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
-                    sb.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};{obra};{unidade};{itemOrc};{departamento};{doc};{l.NomeEmpregado}");
+                    sb.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, doc, l.NomeEmpregado));
                 }
                 _csvGeradoGuias = sb.ToString();
                 MostrarPrevia(txtResultadoGuias, _csvGeradoGuias);
@@ -1440,7 +1562,7 @@ public partial class Form1 : Form
                     var cc = l.Centro.ToString("D4");
                     var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
                     string nomeCentro = string.IsNullOrWhiteSpace(l.Nome) ? svc.NomeCentroCusto(_conn!, l.Centro) : l.Nome;
-                    sb2.AppendLine($"{descricao};{cc};{codCredor};{nomeCredor};{valor};{venc};{obra};{unidade};{itemOrc};{departamento};{doc};{nomeCentro}");
+                    sb2.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, doc, nomeCentro));
                     i++;
                 }
                 _csvGeradoGuias = sb2.ToString();

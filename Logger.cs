@@ -18,6 +18,24 @@ public static class Logger
         catch { }
     }
 
+    /// <summary>
+    /// Log de uso compartilhado (D:\SiengeApp\uso_log.csv): quem fez o quê,
+    /// para outro usuário reaproveitar (mapas, apropriações, arquivos gerados).
+    /// </summary>
+    public static void LogUso(string acao, string detalhes)
+    {
+        try
+        {
+            string arq = DbService.ArquivoDados("uso_log.csv");
+            bool novo = !File.Exists(arq);
+            string limpo = (detalhes ?? "").Replace(";", ",").Replace("\r", " ").Replace("\n", " ");
+            File.AppendAllText(arq, (novo ? "DATAHORA;USUARIO;MAQUINA;EMPRESA;ACAO;DETALHES\r\n" : "") +
+                $"{DateTime.Now:yyyy-MM-dd HH:mm:ss};{Environment.UserName};{Environment.MachineName};" +
+                $"{DbService.Empresa};{acao};{limpo}\r\n");
+        }
+        catch { }
+    }
+
     public static void LogErro(string contexto, Exception ex)
     {
         Log($"[ERRO] {contexto}: {ex.Message}");

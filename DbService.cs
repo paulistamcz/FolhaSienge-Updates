@@ -12,6 +12,49 @@ public class DbService
     /// <summary>Empresa (codi_emp) selecionada no app. Usada em todas as consultas.</summary>
     public static int Empresa = 1;
 
+    private static string? _pastaDados;
+
+    /// <summary>
+    /// Pasta central de dados (D:\SiengeApp, compartilhada entre usuários),
+    /// com retorno à pasta do executável se inacessível.
+    /// </summary>
+    public static string PastaDados
+    {
+        get
+        {
+            if (_pastaDados != null) return _pastaDados;
+            try
+            {
+                const string central = @"D:\SiengeApp";
+                if (!Directory.Exists(central)) Directory.CreateDirectory(central);
+                File.WriteAllText(Path.Combine(central, "_ok.tmp"), "ok");
+                File.Delete(Path.Combine(central, "_ok.tmp"));
+                _pastaDados = central;
+            }
+            catch { _pastaDados = AppContext.BaseDirectory; }
+            return _pastaDados;
+        }
+    }
+
+    /// <summary>
+    /// Caminho de um arquivo de dados, migrando o que existir ao lado do
+    /// executável para a pasta central no primeiro uso.
+    /// </summary>
+    public static string ArquivoDados(string nome)
+    {
+        string dest = Path.Combine(PastaDados, nome);
+        try
+        {
+            if (!File.Exists(dest))
+            {
+                string origem = Path.Combine(AppContext.BaseDirectory, nome);
+                if (File.Exists(origem)) File.Copy(origem, dest);
+            }
+        }
+        catch { }
+        return dest;
+    }
+
     /// <summary>Mapeamento da coluna B (centro Domínio -&gt; obra Sienge), informado a cada geração.</summary>
     public static Dictionary<int, int> MapaCentrosSienge { get; set; } = new();
 
@@ -19,9 +62,8 @@ public class DbService
     public static int CentroCsv(int centro) =>
         MapaCentrosSienge.TryGetValue(centro, out var s) && s > 0 ? s : centro;
 
-    /// <summary>Arquivo do mapeamento DE-PARA ao lado do executável (DOMINIO;SIENGE).</summary>
-    public static string ArquivoMapaCentros =>
-        Path.Combine(AppContext.BaseDirectory, "mapeamento_centros.csv");
+    /// <summary>Arquivo do mapeamento DE-PARA (EMPRESA;DOMINIO;SIENGE).</summary>
+    public static string ArquivoMapaCentros => ArquivoDados("mapeamento_centros.csv");
 
     /// <summary>Lê o mapeamento DE-PARA do disco para a empresa (vazio = identidade).</summary>
     public static Dictionary<int, int> CarregarMapaCentros(int empresa)
@@ -394,6 +436,16 @@ public class DbService
         return lista;
     }
 
+    /// <summary>Monta uma linha do CSV Sienge (12 colunas separadas por ';').</summary>
+    public static string LinhaCsv(string verba, string cc, string credorCodigo, string credorNome,
+        string valor, string vencimento, string obra, string unidade, string itemOrcamento,
+        string departamento, string doc, string obs) =>
+        $"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{doc};{obs}";
+
+    /// <summary>Documento da linha: a base, ou base + sequencial quando numerado.</summary>
+    public static string DocLinha(string competenciaDoc, bool numerarDoc, int i) =>
+        numerarDoc ? $"{competenciaDoc} {i}" : competenciaDoc;
+
     /// <summary>
     /// Monta a base do documento (coluna K): RRRRVVVCCCDDMMAA = 4 aleatórios +
     /// verba (D3) + credor numérico (D3) + data (ddMMyy). Ex.: 3249001001200926.
@@ -409,12 +461,17 @@ public class DbService
         List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)> linhas,
         string vencimento, string verba, string competenciaDoc, string observacao = "",
         string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "",
-        bool numerarDoc = false)
+        bool numerarDoc = false,
+        IReadOnlyList<(string G, string H, string I, string J)>? apropriacoes = null)
     {
         var sb = new System.Text.StringBuilder();
-        int i = 1;
+        int i = 1, idx = 0;
         foreach (var l in linhas)
         {
+            var ap = (apropriacoes != null && idx < apropriacoes.Count)
+                ? apropriacoes[idx]
+                : (G: obra, H: unidade, I: itemOrcamento, J: departamento);
+            idx++;
             var cc = CentroCsv(l.Centro).ToString("D4");
             var credorCodigo = string.IsNullOrWhiteSpace(l.CredorCodigo) ? $"CRED{i:D2}" : l.CredorCodigo;
             var credorNome = string.IsNullOrWhiteSpace(l.CredorNome) ? l.Nome : l.CredorNome;
@@ -423,8 +480,8 @@ public class DbService
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.Nome : $"{observacao} - {l.Nome}";
             // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
             if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
-            var docLinha = numerarDoc ? $"{competenciaDoc} {i}" : competenciaDoc;
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{docLinha};{obs}");
+            var docLinha = DocLinha(competenciaDoc, numerarDoc, i);
+            sb.AppendLine(LinhaCsv(verba, cc, credorCodigo, credorNome, valor, vencimento, ap.G, ap.H, ap.I, ap.J, docLinha, obs));
             i++;
         }
         return sb.ToString();
@@ -472,19 +529,24 @@ public class DbService
         string vencimento, string verba, string credorCodigo, string credorNome,
         string competenciaDoc, string observacao = "",
         string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "",
-        bool numerarDoc = false)
+        bool numerarDoc = false,
+        IReadOnlyList<(string G, string H, string I, string J)>? apropriacoes = null)
     {
         var sb = new System.Text.StringBuilder();
-        int i = 1;
+        int i = 1, idx = 0;
         foreach (var l in linhas)
         {
+            var ap = (apropriacoes != null && idx < apropriacoes.Count)
+                ? apropriacoes[idx]
+                : (G: obra, H: unidade, I: itemOrcamento, J: departamento);
+            idx++;
             var cc = CentroCsv(l.Centro).ToString("D4");
             var valor = l.Liquido.ToString("0.00", CultureInfo.InvariantCulture);
             var obs = string.IsNullOrWhiteSpace(observacao) ? l.NomeEmpregado : observacao + " - " + l.NomeEmpregado;
             // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
             if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
-            var docLinha = numerarDoc ? $"{competenciaDoc} {i}" : competenciaDoc;
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{docLinha};{obs}");
+            var docLinha = DocLinha(competenciaDoc, numerarDoc, i);
+            sb.AppendLine(LinhaCsv(verba, cc, credorCodigo, credorNome, valor, vencimento, ap.G, ap.H, ap.I, ap.J, docLinha, obs));
             i++;
         }
         return sb.ToString();
@@ -574,18 +636,23 @@ public class DbService
         List<(int Centro, string Nome, decimal Valor, DateTime IniGozo, DateTime FimGozo, int Dias)> linhas,
         string vencimento, string verba, string credorCodigo, string credorNome,
         string competenciaDoc, string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "",
-        bool numerarDoc = false)
+        bool numerarDoc = false,
+        IReadOnlyList<(string G, string H, string I, string J)>? apropriacoes = null)
     {
         var sb = new System.Text.StringBuilder();
-        int i = 1;
+        int i = 1, idx = 0;
         foreach (var l in linhas)
         {
+            var ap = (apropriacoes != null && idx < apropriacoes.Count)
+                ? apropriacoes[idx]
+                : (G: obra, H: unidade, I: itemOrcamento, J: departamento);
+            idx++;
             var cc = CentroCsv(l.Centro).ToString("D4");
             var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
             var per = PeriodoFerias(l.IniGozo, l.FimGozo, l.Dias);
             var obs = string.IsNullOrEmpty(per) ? $"REF. A FERIAS - {l.Nome}" : $"REF. A FERIAS - {l.Nome} - {per}";
-            var docLinha = numerarDoc ? $"{competenciaDoc} {i}" : competenciaDoc;
-            sb.AppendLine($"{verba};{cc};{credorCodigo};{credorNome};{valor};{vencimento};{obra};{unidade};{itemOrcamento};{departamento};{docLinha};{obs}");
+            var docLinha = DocLinha(competenciaDoc, numerarDoc, i);
+            sb.AppendLine(LinhaCsv(verba, cc, credorCodigo, credorNome, valor, vencimento, ap.G, ap.H, ap.I, ap.J, docLinha, obs));
             i++;
         }
         return sb.ToString();
@@ -1240,6 +1307,62 @@ public class DbService
         if (rd.Read() && !rd.IsDBNull(0))
             return Convert.ToString(rd[0]) ?? "";
         return centro.ToString();
+    }
+
+    /// <summary>
+    /// Dados dos centros no Domínio para o relatório Domínio x Sienge:
+    /// (Centro, Nome, Funcs, PrimeiroMov, UltimoMov). Movimento = min/max entre
+    /// folha (competência), férias e rescisões (pagamento), pelo centro atual.
+    /// </summary>
+    public List<(int Centro, string Nome, int Funcs, DateTime PrimeiroMov, DateTime UltimoMov)>
+        DadosCentrosDominio(OdbcConnection conn)
+    {
+        var mapa = new Dictionary<int, (string Nome, int Funcs, DateTime Primeiro, DateTime Ultimo)>();
+        using (var cmd = new OdbcCommand(
+            "SELECT c.i_ccustos, TRIM(c.nome) FROM bethadba.foccustos c " +
+            "WHERE c.codi_emp = " + DbService.Empresa + " ORDER BY c.i_ccustos", conn))
+        using (var rd = cmd.ExecuteReader())
+            while (rd.Read())
+                mapa[Convert.ToInt32(rd[0])] = (rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!,
+                    0, DateTime.MinValue, DateTime.MinValue);
+        using (var cmd = new OdbcCommand(
+            "SELECT e.i_ccustos, COUNT(*) FROM bethadba.foempregados e " +
+            "WHERE e.codi_emp = " + DbService.Empresa + " GROUP BY e.i_ccustos", conn))
+        using (var rd = cmd.ExecuteReader())
+            while (rd.Read())
+            {
+                int cc = Convert.ToInt32(rd[0]);
+                if (mapa.TryGetValue(cc, out var v)) mapa[cc] = (v.Nome, Convert.ToInt32(rd[1]), v.Primeiro, v.Ultimo);
+            }
+        using (var cmd = new OdbcCommand(
+            "SELECT x.centro, MIN(x.d), MAX(x.d) FROM (" +
+            "SELECT e.i_ccustos AS centro, l.competencia AS d " +
+            "FROM bethadba.foliquidosfilepr f " +
+            "JOIN bethadba.foliquidosfil l ON f.I_LIQUIDOSFIL = l.I_LIQUIDOSFIL " +
+            "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
+            "WHERE f.codi_emp = " + DbService.Empresa + " AND l.competencia IS NOT NULL AND e.i_ccustos IS NOT NULL " +
+            "UNION ALL " +
+            "SELECT e.i_ccustos, o.DATA_PAGTO " +
+            "FROM bethadba.FOFERIAS o " +
+            "LEFT JOIN bethadba.foempregados e ON o.CODI_EMP = e.codi_emp AND o.I_EMPREGADOS = e.i_empregados " +
+            "WHERE o.CODI_EMP = " + DbService.Empresa + " AND o.DATA_PAGTO IS NOT NULL AND e.i_ccustos IS NOT NULL " +
+            "UNION ALL " +
+            "SELECT e.i_ccustos, r.data_pagto " +
+            "FROM bethadba.forescisoes r " +
+            "LEFT JOIN bethadba.foempregados e ON r.codi_emp = e.codi_emp AND r.i_empregados = e.i_empregados " +
+            "WHERE r.codi_emp = " + DbService.Empresa + " AND r.data_pagto IS NOT NULL AND e.i_ccustos IS NOT NULL" +
+            ") AS x GROUP BY x.centro", conn))
+        using (var rd = cmd.ExecuteReader())
+            while (rd.Read())
+            {
+                int cc = Convert.ToInt32(rd[0]);
+                DateTime ini = rd.IsDBNull(1) ? DateTime.MinValue : Convert.ToDateTime(rd[1]);
+                DateTime fim = rd.IsDBNull(2) ? DateTime.MinValue : Convert.ToDateTime(rd[2]);
+                if (mapa.TryGetValue(cc, out var v)) mapa[cc] = (v.Nome, v.Funcs, ini, fim);
+            }
+        return mapa.OrderBy(k => k.Key)
+            .Select(k => (k.Key, k.Value.Nome, k.Value.Funcs, k.Value.Primeiro, k.Value.Ultimo))
+            .ToList();
     }
 
     /// <summary>Detalhamento completo de um funcionário para o relatório por centro (layout Extrato Mensal Sienge).</summary>

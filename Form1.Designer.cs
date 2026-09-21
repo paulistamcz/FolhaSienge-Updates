@@ -85,6 +85,7 @@ partial class Form1
     private Label lblFolhaAte;
     private MaskedTextBox mtbFolhaFim;
     private CheckBox chkDocSeq;
+    private Button btnRelatorioDomSien;
 
     private GroupBox grpGuias;
     private Label lblGuiasTipo;
@@ -174,6 +175,7 @@ partial class Form1
         this.lblFolhaAte = new Label();
         this.mtbFolhaFim = new MaskedTextBox();
         this.chkDocSeq = new CheckBox();
+        this.btnRelatorioDomSien = new Button();
         this.grpGuias = new GroupBox();
         this.lblGuiasTipo = new Label();
         this.cmbGuiasTipo = new ComboBox();
@@ -602,6 +604,7 @@ partial class Form1
         this.grpFolha.Controls.Add(this.lblFolhaAte);
         this.grpFolha.Controls.Add(this.mtbFolhaFim);
         this.grpFolha.Controls.Add(this.chkDocSeq);
+        this.grpFolha.Controls.Add(this.btnRelatorioDomSien);
         this.grpFolha.Dock = System.Windows.Forms.DockStyle.Fill;
         this.grpFolha.Location = new System.Drawing.Point(3, 3);
         this.grpFolha.Name = "grpFolha";
@@ -706,10 +709,20 @@ partial class Form1
         this.chkDocSeq.CheckState = CheckState.Checked;
         this.chkDocSeq.Location = new System.Drawing.Point(296, 56);
         this.chkDocSeq.Name = "chkDocSeq";
-        this.chkDocSeq.Size = new System.Drawing.Size(210, 19);
+        this.chkDocSeq.Size = new System.Drawing.Size(110, 19);
         this.chkDocSeq.TabIndex = 36;
-        this.chkDocSeq.Text = "Numerar docs (nome 1, 2, 3...)";
+        this.chkDocSeq.Text = "Numerar docs";
         this.chkDocSeq.UseVisualStyleBackColor = true;
+        //
+        // btnRelatorioDomSien
+        //
+        this.btnRelatorioDomSien.Location = new System.Drawing.Point(416, 52);
+        this.btnRelatorioDomSien.Name = "btnRelatorioDomSien";
+        this.btnRelatorioDomSien.Size = new System.Drawing.Size(150, 24);
+        this.btnRelatorioDomSien.TabIndex = 37;
+        this.btnRelatorioDomSien.Text = "Relatório Dom x Sienge";
+        this.btnRelatorioDomSien.UseVisualStyleBackColor = true;
+        this.btnRelatorioDomSien.Click += new EventHandler(this.btnRelatorioDomSien_Click);
         //
         // btnGerarFolha
         //
