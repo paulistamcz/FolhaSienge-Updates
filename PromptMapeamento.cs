@@ -97,10 +97,6 @@ public class PromptMapeamento : Form
         _lblApi.ForeColor = System.Drawing.Color.Gray;
         _lblApi.Text = "";
 
-        // TODO-API: reexibir ao finalizar a validação via API do Sienge.
-        _btnValidar.Visible = false;
-        _btnConfig.Visible = false;
-        _lblApi.Visible = false;
         _btnValidar.Text = "Validar obras";
         _btnValidar.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
         _btnValidar.Location = new System.Drawing.Point(12, 404);

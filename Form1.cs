@@ -19,10 +19,18 @@ public partial class Form1 : Form
     {
         InitializeComponent();
         this.Shown += Form1_Shown;
+        dgvGrf.CurrentCellDirtyStateChanged += dgvGrf_CellDirty;
         CarregarVerbas();
         CarregarTiposFolha();
         CarregarTiposGuias();
         Text = $"Plus Informática - Folha de Pagamento (Plus Contabilidade)  v{Atualizador.VersaoAtual}";
+    }
+
+    /// <summary>Confirma o clique no checkbox da grade GRRF na hora.</summary>
+    private void dgvGrf_CellDirty(object? sender, EventArgs e)
+    {
+        if (dgvGrf.IsCurrentCellDirty)
+            dgvGrf.CommitEdit(DataGridViewDataErrorContexts.Commit);
     }
 
     private void btnSair_Click(object sender, EventArgs e)
@@ -913,7 +921,12 @@ public partial class Form1 : Form
             dgvGrf.Columns["Centro"].Width = 70;
             dgvGrf.Columns["Vencimento"].Width = 90;
             dgvGrf.Columns["Valor"].DefaultCellStyle.Format = "N2";
-            dgvGrf.Columns["Sel"].ReadOnly = true;
+            dgvGrf.Columns["Sel"].ReadOnly = false;
+            dgvGrf.Columns["Emp"].ReadOnly = true;
+            dgvGrf.Columns["Nome"].ReadOnly = true;
+            dgvGrf.Columns["Centro"].ReadOnly = true;
+            dgvGrf.Columns["Vencimento"].ReadOnly = true;
+            dgvGrf.Columns["Valor"].ReadOnly = true;
 
             decimal total = _linhasGrf.Sum(x => x.Valor);
             lblTotalGrf.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
@@ -1417,10 +1430,6 @@ public partial class Form1 : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
-        string doc = string.IsNullOrWhiteSpace(txtDoc.Text.Trim())
-            ? comp.Replace("/", "")
-            : txtDoc.Text.Trim();
-
         int tipoIdx = cmbGuiasTipo.SelectedIndex;
         bool analitico = cmbGuiasModo.SelectedIndex == 1;
 
@@ -1446,18 +1455,42 @@ public partial class Form1 : Form
 
             // Código/nome do credor por tipo (tabela_financeira)
             string descricao = cmbGuiasTipo.SelectedItem?.ToString() ?? "INSS";
-            // Coluna A: código numérico da verba (IRRF sai como 010, não texto).
-            string verbaGuia = descricao.ToUpperInvariant() == "IRRF" ? "010" : descricao;
+            // Coluna A: código da verba como cadastrado no Sienge.
+            string verbaGuia = descricao.ToUpperInvariant() switch
+            {
+                "INSS" => "2",
+                "FGTS" => "58",
+                "IRRF" => "010",
+                "GRRF" => "59",
+                _ => descricao, // ECONSIGNADO e outros: mantém até confirmar o código
+            };
             string codCredor, nomeCredor;
             switch (descricao.ToUpperInvariant())
             {
                 case "INSS": codCredor = "298"; nomeCredor = "MINISTERIO DA FAZENDA"; break;
-                case "IRRF": codCredor = ""; nomeCredor = "MINISTERIO DA FAZENDA"; break;
-                case "FGTS": codCredor = ""; nomeCredor = "CAIXA ECONOMICA FEDERAL"; break;
+                case "IRRF": codCredor = "298"; nomeCredor = "MINISTERIO DA FAZENDA"; break;
+                case "FGTS": codCredor = "37"; nomeCredor = "CAIXA ECONOMICA FEDERAL"; break;
                 case "ECONSIGNADO": codCredor = ""; nomeCredor = "CAIXA ECONOMICA FEDERAL"; break;
                 default: codCredor = "37"; nomeCredor = "GRRF"; break;
             }
             if (string.IsNullOrWhiteSpace(codCredor)) codCredor = "1";
+
+            // Código numérico da verba para a base do documento.
+            int verbaGuiaNum = descricao.ToUpperInvariant() switch
+            {
+                "INSS" => 2,
+                "FGTS" => 58,
+                "IRRF" => 10,
+                "ECONSIGNADO" => 0,
+                _ => 59, // GRRF
+            };
+            // Documento (K): o digitado, ou base automática RRRRVVVCCCDDMMAA.
+            string doc = txtDoc.Text.Trim();
+            if (string.IsNullOrWhiteSpace(doc))
+            {
+                doc = DbService.GerarDocBase(verbaGuiaNum, codCredor, DateTime.Now, Random.Shared.Next(1000, 10000));
+                txtDoc.Text = doc;
+            }
 
             // Modo analítico: por funcionário (1 linha por pessoa), filtrado por centro da seção 2.
             List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)> analiticoLinhas = new();
@@ -1493,11 +1526,16 @@ public partial class Form1 : Form
                 }
 
                 var sb = new System.Text.StringBuilder();
+                int seq = 1;
+                // Numera o documento só quando o arquivo tem +1 linha.
+                bool numera = analiticoLinhas.Count > 1;
                 foreach (var l in analiticoLinhas)
                 {
                     var cc = l.Centro.ToString("D4");
                     var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
-                    sb.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, doc, l.NomeEmpregado));
+                    var docLinha = numera ? $"{doc} {seq}" : doc;
+                    seq++;
+                    sb.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, docLinha, $"{l.NomeEmpregado} {descricao} {comp}"));
                 }
                 _csvGeradoGuias = sb.ToString();
                 MostrarPrevia(txtResultadoGuias, _csvGeradoGuias);
@@ -1557,12 +1595,15 @@ public partial class Form1 : Form
 
                 var sb2 = new System.Text.StringBuilder();
                 int i = 1;
+                // Numera o documento só quando o arquivo tem +1 linha.
+                bool numera2 = linhasCompletas.Count > 1;
                 foreach (var l in linhasCompletas)
                 {
                     var cc = l.Centro.ToString("D4");
                     var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
                     string nomeCentro = string.IsNullOrWhiteSpace(l.Nome) ? svc.NomeCentroCusto(_conn!, l.Centro) : l.Nome;
-                    sb2.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, doc, nomeCentro));
+                    var docLinha2 = numera2 ? $"{doc} {i}" : doc;
+                    sb2.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, docLinha2, $"{nomeCentro} {descricao} {comp}"));
                     i++;
                 }
                 _csvGeradoGuias = sb2.ToString();

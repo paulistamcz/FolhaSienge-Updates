@@ -1971,21 +1971,26 @@ public class DbService
     }
 
     /// <summary>
-    /// Gera o CSV do lote GRRF no formato da planilha manual.
-    /// Layout: 59;centro;37;GRRF;valor;vencimento;;;;;GRRF-dd-MM-yyyy-n;NOME
+    /// Gera o CSV do lote GRRF no formato da planilha manual, com doc e obs
+    /// estilo folha (base RRRRVVVCCCDDMMAA + sequência; obs com sufixo).
+    /// Layout: 59;centro;37;GRRF;valor;vencimento;;;;;doc;NOME GRRF MM/AAAA
     /// </summary>
     public static string GerarCsvGrf(
         List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)> linhas,
         string centro, DateTime dataLote, string verba = "59")
     {
         var sb = new System.Text.StringBuilder();
-        string lote = dataLote.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture);
+        string comp = dataLote.ToString("MM/yyyy", CultureInfo.InvariantCulture);
+        string docBase = GerarDocBase(59, "37", DateTime.Now, Random.Shared.Next(1000, 10000));
+        bool numera = linhas.Count > 1;
         int n = 1;
         foreach (var l in linhas)
         {
             var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
             var venc = l.Vencimento.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
-            sb.AppendLine($"{verba};{centro};37;GRRF;{valor};{venc};;;;;GRRF-{lote}-{n};{l.Nome}");
+            var docLinha = numera ? $"{docBase} {n}" : docBase;
+            var obs = $"{l.Nome} GRRF {comp}";
+            sb.AppendLine(LinhaCsv(verba, centro, "37", "GRRF", valor, venc, "", "", "", "", docLinha, obs));
             n++;
         }
         return sb.ToString();
