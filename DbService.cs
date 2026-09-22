@@ -165,9 +165,18 @@ public class DbService
         [(57, 6)] = (519, "86", "1", "ITEM 02"),
     };
 
-    /// <summary>Padrão G/H/I da base oficial para (empresa, centro); null se fora da base.</summary>
+    /// <summary>Padrão G/H/I da base oficial para (empresa, centro); null se fora da base.
+    /// O item (I) sai só com números (remove prefixo "ITEM " da planilha).</summary>
     public static (string G, string H, string I)? PadraoApropriacao(int empresa, int centro) =>
-        BaseOficialCentros.TryGetValue((empresa, centro), out var v) ? (v.G, v.H, v.I) : null;
+        BaseOficialCentros.TryGetValue((empresa, centro), out var v) ? (v.G, v.H, NormalizarItem(v.I)) : null;
+
+    /// <summary>Item do orçamento só com números: remove prefixo "ITEM " (qualquer caixa) e aparas.</summary>
+    public static string NormalizarItem(string item)
+    {
+        var t = (item ?? "").Trim();
+        if (t.StartsWith("ITEM ", StringComparison.OrdinalIgnoreCase)) t = t.Substring(5).Trim();
+        return t;
+    }
 
     /// <summary>Grava o mapeamento DE-PARA da empresa no disco (mescla com o existente; mantém as demais).</summary>
     public static void SalvarMapaCentros(int empresa, Dictionary<int, int> mapa)
