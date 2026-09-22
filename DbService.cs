@@ -68,25 +68,108 @@ public class DbService
     /// <summary>Lê o mapeamento DE-PARA do disco para a empresa (vazio = identidade).</summary>
     public static Dictionary<int, int> CarregarMapaCentros(int empresa)
     {
-        var mapa = new Dictionary<int, int>();
+        var baseOf = new Dictionary<int, int>();
+        foreach (var kv in BaseOficialCentros)
+            if (kv.Key.Emp == empresa) baseOf[kv.Key.Centro] = kv.Value.B;
+        var arquivo = new Dictionary<int, int>();
         try
         {
             var arq = ArquivoMapaCentros;
-            if (!File.Exists(arq)) return mapa;
-            foreach (var lin in File.ReadAllLines(arq))
+            if (File.Exists(arq))
             {
-                var p = lin.Split(';');
-                if (p.Length < 3) continue;
-                if (int.TryParse(p[0].Trim(), out var emp) && emp == empresa &&
-                    int.TryParse(p[1].Trim(), out var de) && int.TryParse(p[2].Trim(), out var para) && para > 0)
-                    mapa[de] = para;
+                foreach (var lin in File.ReadAllLines(arq))
+                {
+                    var p = lin.Split(';');
+                    if (p.Length < 3) continue;
+                    if (int.TryParse(p[0].Trim(), out var emp) && emp == empresa &&
+                        int.TryParse(p[1].Trim(), out var de) && int.TryParse(p[2].Trim(), out var para) && para > 0)
+                        arquivo[de] = para;
+                }
             }
         }
         catch { }
-        return mapa;
+        return MesclarMapa(baseOf, arquivo);
     }
 
-    /// <summary>Grava o mapeamento DE-PARA da empresa no disco (mantém as demais).</summary>
+    /// <summary>Mescla pura: começa na base oficial e sobrepõe o que o usuário salvou.</summary>
+    public static Dictionary<int, int> MesclarMapa(Dictionary<int, int> baseOf, Dictionary<int, int> arquivo)
+    {
+        var r = new Dictionary<int, int>(baseOf);
+        foreach (var kv in arquivo) r[kv.Key] = kv.Value;
+        return r;
+    }
+
+    /// <summary>
+    /// Base oficial Domínio→Sienge (planilha "Resumo de obras e apropriações - Sienge X Dominio", 22/09/2026,
+    /// validada contra a API: 55/56; COMODORO usa o centro 549, pois o 391 da planilha é da empresa 61).
+    /// Chave (empresa Domínio, centro Domínio); valor (B = centro Sienge, G = empresa Sienge,
+    /// H = unidade construtiva, I = item do orçamento). H/I vazios = "NAO POSSUI" (só empresa+centro).
+    /// </summary>
+    public static readonly Dictionary<(int Emp, int Centro), (int B, string G, string H, string I)> BaseOficialCentros = new()
+    {
+        [(1, 129)] = (228, "55", "", ""),
+        [(1, 131)] = (302, "55", "", ""),
+        [(1, 130)] = (303, "55", "", ""),
+        [(1, 180)] = (502, "98", "", ""),
+        [(1, 171)] = (494, "98", "5", "00.000.001.001"),
+        [(1, 1)] = (1, "1", "26", "ITEM 01.010"),
+        [(1, 165)] = (430, "1", "1", "ITEM 01.001"),
+        [(1, 154)] = (331, "73", "", ""),
+        [(1, 174)] = (357, "1", "1", "ITEM 01.002"),
+        [(1, 531)] = (531, "112", "1", "00.000.024.001"),
+        [(1, 181)] = (549, "1", "", ""),
+        [(1, 544)] = (544, "1", "1", "00.000.004.015"),
+        [(1, 233)] = (233, "1", "1", "ITEM 01.002"),
+        [(1, 556)] = (556, "1", "", ""),
+        [(1, 176)] = (462, "1", "1", "ITEM 01.001"),
+        [(1, 140)] = (1, "1", "2", "ITEM 01.001"),
+        [(1, 124)] = (246, "1", "", ""),
+        [(1, 149)] = (347, "1", "", ""),
+        [(1, 150)] = (348, "1", "", ""),
+        [(1, 148)] = (343, "1", "", ""),
+        [(1, 69)] = (110, "1", "", ""),
+        [(1, 144)] = (329, "1", "", ""),
+        [(1, 177)] = (523, "1", "", ""),
+        [(1, 161)] = (414, "1", "1", "ITEM 00.000.000.002"),
+        [(1, 170)] = (191, "53", "", ""),
+        [(1, 178)] = (505, "53", "", ""),
+        [(1, 179)] = (513, "104", "1", "ITEM 00.001.004.007"),
+        [(1, 167)] = (431, "1", "1", "ITEM 00.000.001.010"),
+        [(1, 172)] = (463, "1", "1", "ITEM 00.000.001.010"),
+        [(1, 162)] = (413, "84", "1", "ITEM 02.004"),
+        [(1, 134)] = (281, "1", "", ""),
+        [(1, 141)] = (307, "1", "", ""),
+        [(1, 151)] = (11, "1", "1", "ITEM 00.000.005.001"),
+        [(1, 160)] = (412, "1", "1", "ITEM 00.000.001.010"),
+        [(4, 1)] = (39, "2", "26", "item 01.009"),
+        [(4, 42)] = (455, "2", "", ""),
+        [(4, 45)] = (530, "111", "", ""),
+        [(4, 552)] = (552, "2", "", ""),
+        [(4, 40)] = (309, "2", "", ""),
+        [(55, 2)] = (507, "105", "1", "item 00.000.024.004"),
+        [(53, 2)] = (521, "97", "1", "item 00.000.001.005"),
+        [(59, 2)] = (525, "108", "1", "item 00.000.004.003"),
+        [(15, 2)] = (192, "50", "", ""),
+        [(44, 2)] = (274, "62", "", ""),
+        [(51, 2)] = (442, "88", "", ""),
+        [(43, 2)] = (232, "61", "1", "item 00.004.000.001"),
+        [(47, 2)] = (355, "75", "1", "item 01.001.004"),
+        [(46, 2)] = (323, "72", "", ""),
+        [(45, 2)] = (310, "68", "", ""),
+        [(48, 5)] = (381, "81", "1", "item 00.000.022.001"),
+        [(48, 7)] = (384, "81", "1", "item 00.000.022.001"),
+        [(57, 2)] = (516, "86", "1", "ITEM 02"),
+        [(57, 3)] = (515, "86", "1", "ITEM 02"),
+        [(57, 5)] = (518, "86", "1", "ITEM 02"),
+        [(57, 7)] = (522, "86", "1", "ITEM 02"),
+        [(57, 6)] = (519, "86", "1", "ITEM 02"),
+    };
+
+    /// <summary>Padrão G/H/I da base oficial para (empresa, centro); null se fora da base.</summary>
+    public static (string G, string H, string I)? PadraoApropriacao(int empresa, int centro) =>
+        BaseOficialCentros.TryGetValue((empresa, centro), out var v) ? (v.G, v.H, v.I) : null;
+
+    /// <summary>Grava o mapeamento DE-PARA da empresa no disco (mescla com o existente; mantém as demais).</summary>
     public static void SalvarMapaCentros(int empresa, Dictionary<int, int> mapa)
     {
         try
@@ -104,8 +187,6 @@ public class DbService
                         todos[(emp, de)] = para;
                 }
             }
-            foreach (var k in todos.Keys.Where(k => k.Emp == empresa).ToList())
-                todos.Remove(k);
             foreach (var kv in mapa)
                 if (kv.Value > 0) todos[(empresa, kv.Key)] = kv.Value;
             var linhas = new List<string> { "EMPRESA;DOMINIO;SIENGE" };

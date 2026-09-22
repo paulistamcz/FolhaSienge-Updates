@@ -538,32 +538,31 @@ public partial class Form1 : Form
 
     /// <summary>
     /// Monta as linhas da grade de apropriação (B do mapa + G/H/I/J informados,
-    /// ou os lembrados quando vazios).
+    /// ou o padrão oficial da base, ou os lembrados quando vazios).
+    /// Precedência por campo: informado &gt; base oficial &gt; lembrado.
     /// </summary>
     private static List<LinhaApropriacao> MontarGradeApropriacao(
         IEnumerable<(int Indice, string Desc, int Centro, decimal Valor)> src,
         string gInf = "", string hInf = "", string iInf = "", string jInf = "")
     {
         var (g0, h0, i0, j0) = PromptApropriacao.CarregarUltima();
-        if (gInf == "" && hInf == "" && iInf == "" && jInf == "")
+        bool tudoVazio = gInf == "" && hInf == "" && iInf == "" && jInf == "";
+        return src.Select(s =>
         {
-            gInf = g0;
-            hInf = h0;
-            iInf = i0;
-            jInf = j0;
-        }
-        return src.Select(s => new LinhaApropriacao
-        {
-            Indice = s.Indice,
-            Descricao = s.Desc,
-            Centro = s.Centro,
-            Valor = s.Valor,
-            B = DbService.CentroCsv(s.Centro),
-            G = gInf,
-            H = hInf,
-            I = iInf,
-            J = jInf,
-            Sel = true
+            var pad = DbService.PadraoApropriacao(DbService.Empresa, s.Centro);
+            return new LinhaApropriacao
+            {
+                Indice = s.Indice,
+                Descricao = s.Desc,
+                Centro = s.Centro,
+                Valor = s.Valor,
+                B = DbService.CentroCsv(s.Centro),
+                G = gInf != "" ? gInf : (pad?.G ?? (tudoVazio ? g0 : "")),
+                H = hInf != "" ? hInf : (pad != null ? pad.Value.H : (tudoVazio ? h0 : "")),
+                I = iInf != "" ? iInf : (pad != null ? pad.Value.I : (tudoVazio ? i0 : "")),
+                J = jInf != "" ? jInf : (tudoVazio ? j0 : ""),
+                Sel = true
+            };
         }).ToList();
     }
 
