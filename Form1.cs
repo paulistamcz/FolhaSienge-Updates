@@ -1062,6 +1062,11 @@ public partial class Form1 : Form
         else
             compSufixo = "";
         string sufixoObs = $"{funcaoFolha} {compSufixo}".Trim();
+        // Modelo compacto da coluna L: "REF. A {FOLHA MENSAL|FOLHA ADIANTAMENTO|FERIAS|RESCISAO} {MM/AAAA} - ...".
+        string descRef = tipo switch { 0 => "FOLHA MENSAL", 1 => "FOLHA ADIANTAMENTO", 2 => "FERIAS", _ => "RESCISAO" };
+        // Texto (L) digitado vai no fim da obs, exceto quando é o padrão automático da verba.
+        string obsPadrao = (cmbVerba.SelectedItem as VerbaFinanceira)?.Descricao ?? "";
+        string extraObs = (obs != "" && obs != obsPadrao) ? obs : "";
 
         Cursor = Cursors.WaitCursor;
         try
@@ -1143,7 +1148,8 @@ public partial class Form1 : Form
                             return (f.Centro, f.NomeEmpregado, f.Valor, f.IniGozo, f.FimGozo, f.Dias);
                         }).ToList();
                         _csvGeradoFolha = DbService.GerarCsvFerias(comPer,
-                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap);
+                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap,
+                            compRef: compSufixo, extra: extraObs);
                         linhas = sel.Select(r => {
                             var f = ferFull[r.Indice];
                             return (f.Centro, f.NomeEmpregado, f.Empregado, f.Valor);
@@ -1152,7 +1158,7 @@ public partial class Form1 : Form
                     else
                     {
                         linhas = sel.Select(r => linhas[r.Indice]).ToList();
-                        _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap);
+                        _csvGeradoFolha = DbService.GerarCsvAnalitico(linhas, venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap, descRef: descRef, compRef: compSufixo, extra: extraObs);
                     }
                     decimal total = linhas.Sum(x => x.Valor);
                     lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
@@ -1214,7 +1220,8 @@ public partial class Form1 : Form
                         var sub = sel.Select(r => centrosFer7[r.Indice]).ToList();
                         var comPer = sub.Select(c => (c.Centro, c.Nome, c.Total, c.IniGozo, c.FimGozo, c.Dias)).ToList();
                         _csvGeradoFolha = DbService.GerarCsvFerias(comPer,
-                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap);
+                            venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap,
+                            compRef: compSufixo, extra: extraObs);
                         centros = sub.Select(c => (c.Centro, c.Nome, c.Empregados, c.Total)).ToList();
                         linhasCompletas = centros
                             .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, credorCod, credorNome))
@@ -1226,7 +1233,7 @@ public partial class Form1 : Form
                         linhasCompletas = sub
                             .Select(c => (c.Centro, c.Nome, c.Empregados, c.Total, credorCod, credorNome))
                             .ToList();
-                        _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap);
+                        _csvGeradoFolha = DbService.GerarCsv(linhasCompletas, venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap, descRef: descRef, compRef: compSufixo, extra: extraObs);
                         centros = sub;
                     }
                     decimal total = centros.Sum(x => x.Total);
@@ -1267,7 +1274,7 @@ public partial class Form1 : Form
                 var linhas = sel.Select(r => linhas0[r.Indice]).ToList();
                 _csvGeradoFolha = DbService.GerarCsvAnalitico(
                     linhas.Select(x => (x.Centro, x.NomeEmpregado, x.Empregado, x.Liquido)).ToList(),
-                    venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap);
+                    venc, verba, credorCod, credorNome, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap, descRef: descRef, compRef: compSufixo, extra: extraObs);
                 decimal total = linhas.Sum(x => x.Liquido);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -1354,12 +1361,13 @@ public partial class Form1 : Form
                             perCentro.TryGetValue(l.Centro, out var p);
                             return (l.Centro, l.Nome, l.Total, p.Ini, p.Fim, p.Dias);
                         }).ToList(),
-                        venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap);
+                        venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap,
+                        compRef: compSufixo, extra: extraObs);
                 }
                 else
                     _csvGeradoFolha = DbService.GerarCsv(
                         sub.Select(l => (l.Centro, l.Nome, l.Empregados, l.Total, credorCod, credorNome)).ToList(),
-                        venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap);
+                        venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap, descRef: descRef, compRef: compSufixo, extra: extraObs);
                 linhasCompletas = sub;
                 decimal total = linhasCompletas.Sum(x => x.Total);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
@@ -1534,7 +1542,7 @@ public partial class Form1 : Form
                     var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
                     var docLinha = numera ? $"{doc} {seq}" : doc;
                     seq++;
-                    sb.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, docLinha, $"{l.NomeEmpregado} {descricao} {comp}"));
+                    sb.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, docLinha, DbService.ObsRef(descricao.ToUpperInvariant(), comp, l.NomeEmpregado)));
                 }
                 _csvGeradoGuias = sb.ToString();
                 MostrarPrevia(txtResultadoGuias, _csvGeradoGuias);
@@ -1602,7 +1610,7 @@ public partial class Form1 : Form
                     var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
                     string nomeCentro = string.IsNullOrWhiteSpace(l.Nome) ? svc.NomeCentroCusto(_conn!, l.Centro) : l.Nome;
                     var docLinha2 = numera2 ? $"{doc} {i}" : doc;
-                    sb2.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, docLinha2, $"{nomeCentro} {descricao} {comp}"));
+                    sb2.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, docLinha2, DbService.ObsRef(descricao.ToUpperInvariant(), comp, "CENTRO DE CUSTO: " + nomeCentro)));
                     i++;
                 }
                 _csvGeradoGuias = sb2.ToString();

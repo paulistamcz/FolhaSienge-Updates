@@ -547,12 +547,27 @@ public class DbService
         return $"{aleatorio:0000}{verba:D3}{credor:D3}{data:ddMMyy}";
     }
 
+    /// <summary>
+    /// Observação compacta da coluna L: "REF. A {desc} {MM/AAAA} - {nome}"
+    /// com complemento (ex.: período das férias) e texto digitado (L) no fim.
+    /// </summary>
+    public static string ObsRef(string descRef, string compRef, string nome, string complemento = "", string extra = "")
+    {
+        var cab = "REF. A " + (descRef ?? "").Trim();
+        if (!string.IsNullOrWhiteSpace(compRef)) cab += " " + compRef.Trim();
+        var obs = $"{cab} - {(nome ?? "").Trim()}";
+        if (!string.IsNullOrWhiteSpace(complemento)) obs += " - " + complemento.Trim();
+        if (!string.IsNullOrWhiteSpace(extra)) obs += " - " + extra.Trim();
+        return obs;
+    }
+
     public static string GerarCsv(
         List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)> linhas,
         string vencimento, string verba, string competenciaDoc, string observacao = "",
         string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "",
         bool numerarDoc = false,
-        IReadOnlyList<(string G, string H, string I, string J)>? apropriacoes = null)
+        IReadOnlyList<(string G, string H, string I, string J)>? apropriacoes = null,
+        string descRef = "", string compRef = "", string extra = "")
     {
         var sb = new System.Text.StringBuilder();
         int i = 1, idx = 0;
@@ -566,15 +581,25 @@ public class DbService
             var credorCodigo = string.IsNullOrWhiteSpace(l.CredorCodigo) ? $"CRED{i:D2}" : l.CredorCodigo;
             var credorNome = string.IsNullOrWhiteSpace(l.CredorNome) ? l.Nome : l.CredorNome;
             var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
-            // Observação: se informada (ex.: nome do credor), acrescenta o nome do centro por linha.
-            var obs = string.IsNullOrWhiteSpace(observacao) ? l.Nome : $"{observacao} - {l.Nome}";
-            // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
-            if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
+            // Modelo novo: "REF. A ... - CENTRO DE CUSTO: nome"; legado quando sem descRef.
+            var obs = descRef.Trim() != ""
+                ? ObsRef(descRef, compRef, "CENTRO DE CUSTO: " + l.Nome, "", extra)
+                : LegadoObs(observacao, l.Nome, sufixoObs);
             var docLinha = DocLinha(competenciaDoc, numerarDoc, i);
             sb.AppendLine(LinhaCsv(verba, cc, credorCodigo, credorNome, valor, vencimento, ap.G, ap.H, ap.I, ap.J, docLinha, obs));
             i++;
         }
         return sb.ToString();
+    }
+
+    /// <summary>Observação legada: prefixo (ex.: credor) + nome + sufixo função.</summary>
+    private static string LegadoObs(string observacao, string nome, string sufixoObs)
+    {
+        // Observação: se informada (ex.: nome do credor), acrescenta o nome do centro por linha.
+        var obs = string.IsNullOrWhiteSpace(observacao) ? nome : $"{observacao} - {nome}";
+        // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
+        if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
+        return obs;
     }
 
     /// <summary>
@@ -620,7 +645,8 @@ public class DbService
         string competenciaDoc, string observacao = "",
         string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "", string sufixoObs = "",
         bool numerarDoc = false,
-        IReadOnlyList<(string G, string H, string I, string J)>? apropriacoes = null)
+        IReadOnlyList<(string G, string H, string I, string J)>? apropriacoes = null,
+        string descRef = "", string compRef = "", string extra = "")
     {
         var sb = new System.Text.StringBuilder();
         int i = 1, idx = 0;
@@ -632,9 +658,9 @@ public class DbService
             idx++;
             var cc = CentroCsv(l.Centro).ToString("D4");
             var valor = l.Liquido.ToString("0.00", CultureInfo.InvariantCulture);
-            var obs = string.IsNullOrWhiteSpace(observacao) ? l.NomeEmpregado : observacao + " - " + l.NomeEmpregado;
-            // Sufixo final do campo L (ex.: "ADIANTAMENTO 09/26").
-            if (!string.IsNullOrWhiteSpace(sufixoObs)) obs += " " + sufixoObs.Trim();
+            var obs = descRef.Trim() != ""
+                ? ObsRef(descRef, compRef, l.NomeEmpregado, "", extra)
+                : LegadoObs(observacao, l.NomeEmpregado, sufixoObs);
             var docLinha = DocLinha(competenciaDoc, numerarDoc, i);
             sb.AppendLine(LinhaCsv(verba, cc, credorCodigo, credorNome, valor, vencimento, ap.G, ap.H, ap.I, ap.J, docLinha, obs));
             i++;
@@ -720,14 +746,16 @@ public class DbService
 
     /// <summary>
     /// Gera CSV das férias no layout Sienge com obs
-    /// "REF. A FERIAS - NOME - PERIODO ini A fim dias DIAS".
+    /// "REF. A FERIAS {MM/AAAA} - NOME [- PERIODO ini A fim dias DIAS]".
+    /// Sem compRef, mantém o legado "REF. A FERIAS - NOME ...".
     /// </summary>
     public static string GerarCsvFerias(
         List<(int Centro, string Nome, decimal Valor, DateTime IniGozo, DateTime FimGozo, int Dias)> linhas,
         string vencimento, string verba, string credorCodigo, string credorNome,
         string competenciaDoc, string obra = "", string unidade = "", string itemOrcamento = "", string departamento = "",
         bool numerarDoc = false,
-        IReadOnlyList<(string G, string H, string I, string J)>? apropriacoes = null)
+        IReadOnlyList<(string G, string H, string I, string J)>? apropriacoes = null,
+        string compRef = "", string extra = "")
     {
         var sb = new System.Text.StringBuilder();
         int i = 1, idx = 0;
@@ -740,7 +768,9 @@ public class DbService
             var cc = CentroCsv(l.Centro).ToString("D4");
             var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
             var per = PeriodoFerias(l.IniGozo, l.FimGozo, l.Dias);
-            var obs = string.IsNullOrEmpty(per) ? $"REF. A FERIAS - {l.Nome}" : $"REF. A FERIAS - {l.Nome} - {per}";
+            var obs = compRef.Trim() != ""
+                ? ObsRef("FERIAS", compRef, l.Nome, per, extra)
+                : (string.IsNullOrEmpty(per) ? $"REF. A FERIAS - {l.Nome}" : $"REF. A FERIAS - {l.Nome} - {per}");
             var docLinha = DocLinha(competenciaDoc, numerarDoc, i);
             sb.AppendLine(LinhaCsv(verba, cc, credorCodigo, credorNome, valor, vencimento, ap.G, ap.H, ap.I, ap.J, docLinha, obs));
             i++;
@@ -2062,8 +2092,8 @@ public class DbService
 
     /// <summary>
     /// Gera o CSV do lote GRRF no formato da planilha manual, com doc e obs
-    /// estilo folha (base RRRRVVVCCCDDMMAA + sequência; obs com sufixo).
-    /// Layout: 59;centro;37;GRRF;valor;vencimento;;;;;doc;NOME GRRF MM/AAAA
+    /// estilo folha (base RRRRVVVCCCDDMMAA + sequência; obs compacta).
+    /// Layout: 59;centro;37;GRRF;valor;vencimento;;;;;doc;REF. A GRRF MM/AAAA - NOME
     /// </summary>
     public static string GerarCsvGrf(
         List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)> linhas,
@@ -2079,7 +2109,7 @@ public class DbService
             var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
             var venc = l.Vencimento.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
             var docLinha = numera ? $"{docBase} {n}" : docBase;
-            var obs = $"{l.Nome} GRRF {comp}";
+            var obs = ObsRef("GRRF", comp, l.Nome);
             sb.AppendLine(LinhaCsv(verba, centro, "37", "GRRF", valor, venc, "", "", "", "", docLinha, obs));
             n++;
         }
