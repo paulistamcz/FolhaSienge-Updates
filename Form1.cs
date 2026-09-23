@@ -538,8 +538,9 @@ public partial class Form1 : Form
 
     /// <summary>
     /// Monta as linhas da grade de apropriação (B do mapa + G/H/I/J informados,
-    /// ou o padrão oficial da base, ou os lembrados quando vazios).
-    /// Precedência por campo: informado &gt; base oficial &gt; lembrado.
+    /// ou a personalização salva da grade, ou o padrão oficial da base,
+    /// ou os lembrados quando vazios).
+    /// Precedência por campo: informado &gt; salvo na grade &gt; base oficial &gt; lembrado.
     /// </summary>
     private static List<LinhaApropriacao> MontarGradeApropriacao(
         IEnumerable<(int Indice, string Desc, int Centro, decimal Valor)> src,
@@ -547,9 +548,12 @@ public partial class Form1 : Form
     {
         var (g0, h0, i0, j0) = PromptApropriacao.CarregarUltima();
         bool tudoVazio = gInf == "" && hInf == "" && iInf == "" && jInf == "";
+        var salvos = DbService.CarregarApropriacaoLinhas(DbService.Empresa);
         return src.Select(s =>
         {
             var pad = DbService.PadraoApropriacao(DbService.Empresa, s.Centro);
+            var sv = salvos.TryGetValue(s.Centro, out var v)
+                ? ((string G, string H, string I, string J)?)v : null;
             return new LinhaApropriacao
             {
                 Indice = s.Indice,
@@ -557,23 +561,29 @@ public partial class Form1 : Form
                 Centro = s.Centro,
                 Valor = s.Valor,
                 B = DbService.CentroCsv(s.Centro),
-                G = gInf != "" ? gInf : (pad?.G ?? (tudoVazio ? g0 : "")),
-                H = hInf != "" ? hInf : (pad != null ? pad.Value.H : (tudoVazio ? h0 : "")),
-                I = iInf != "" ? iInf : (pad != null ? pad.Value.I : (tudoVazio ? i0 : "")),
-                J = jInf != "" ? jInf : (tudoVazio ? j0 : ""),
+                G = gInf != "" ? gInf : (sv?.G ?? pad?.G ?? (tudoVazio ? g0 : "")),
+                H = hInf != "" ? hInf : (sv != null ? sv.Value.H : (pad != null ? pad.Value.H : (tudoVazio ? h0 : ""))),
+                I = iInf != "" ? iInf : (sv != null ? sv.Value.I : (pad != null ? pad.Value.I : (tudoVazio ? i0 : ""))),
+                J = jInf != "" ? jInf : (sv?.J ?? (tudoVazio ? j0 : "")),
                 Sel = true
             };
         }).ToList();
     }
 
     /// <summary>
-    /// Exibe a grade de apropriação (seleção + G/H/I/J por linha) e grava os
-    /// lembrados. Retorna as linhas marcadas ou null (cancelar/vazio).
+    /// Exibe a grade de apropriação (seleção + G/H/I/J por linha), grava a
+    /// personalização por centro (última edição vence) e os lembrados.
+    /// Retorna as linhas marcadas ou null (cancelar/vazio).
     /// </summary>
     private List<LinhaApropriacao>? ExibirGradeApropriacao(List<LinhaApropriacao> grade, string titulo)
     {
+        var pre = new Dictionary<int, (string G, string H, string I, string J)>();
+        foreach (var l in grade)
+            if (!pre.ContainsKey(l.Centro)) pre[l.Centro] = (l.G, l.H, l.I, l.J);
         using var dlg = new PromptApropriacaoLinhas(grade, titulo);
         if (dlg.ShowDialog(this) != DialogResult.OK) return null;
+        DbService.SalvarEdicaoApropriacao(DbService.Empresa, pre,
+            grade.Select(l => (l.Centro, l.G, l.H, l.I, l.J)));
         var sel = grade.Where(r => r.Sel).ToList();
         if (sel.Count == 0) return null;
         var prim = sel[0];

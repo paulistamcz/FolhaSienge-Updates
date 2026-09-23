@@ -91,6 +91,83 @@ public class DbService
         return MesclarMapa(baseOf, arquivo);
     }
 
+    /// <summary>Arquivo da personalização por linha da grade (EMPRESA;CENTRO;G;H;I;J).</summary>
+    public static string ArquivoApropriacaoLinhas => ArquivoDados("apropriacao_linhas.csv");
+
+    /// <summary>
+    /// Calcula o que persistir da grade: para cada centro, o valor final quando
+    /// difere do pré-preenchido (edição do usuário) ou null quando voltou ao
+    /// sugerido (limpa o salvo). Última linha do centro vence.
+    /// </summary>
+    public static Dictionary<int, (string G, string H, string I, string J)?> NovasApropriacoesSalvas(
+        Dictionary<int, (string G, string H, string I, string J)> pre,
+        IEnumerable<(int Centro, string G, string H, string I, string J)> finais)
+    {
+        var r = new Dictionary<int, (string G, string H, string I, string J)?>();
+        foreach (var f in finais)
+        {
+            var atual = ((f.G ?? "").Trim(), (f.H ?? "").Trim(), (f.I ?? "").Trim(), (f.J ?? "").Trim());
+            if (pre.TryGetValue(f.Centro, out var p) && p == atual) r[f.Centro] = null;
+            else r[f.Centro] = atual;
+        }
+        return r;
+    }
+
+    /// <summary>Lê a personalização salva da grade para a empresa (centro Domínio → G/H/I/J).</summary>
+    public static Dictionary<int, (string G, string H, string I, string J)> CarregarApropriacaoLinhas(int empresa)
+    {
+        var r = new Dictionary<int, (string G, string H, string I, string J)>();
+        foreach (var kv in CarregarTodasApropriacoesLinhas())
+            if (kv.Key.Emp == empresa) r[kv.Key.Centro] = kv.Value;
+        return r;
+    }
+
+    private static Dictionary<(int Emp, int Centro), (string G, string H, string I, string J)> CarregarTodasApropriacoesLinhas()
+    {
+        var r = new Dictionary<(int Emp, int Centro), (string G, string H, string I, string J)>();
+        try
+        {
+            var arq = ArquivoApropriacaoLinhas;
+            if (!File.Exists(arq)) return r;
+            foreach (var lin in File.ReadAllLines(arq))
+            {
+                var p = lin.Split(';');
+                if (p.Length < 2) continue;
+                if (int.TryParse(p[0].Trim(), out var emp) && int.TryParse(p[1].Trim(), out var de))
+                {
+                    string v(int i) => p.Length > i ? p[i].Trim() : "";
+                    r[(emp, de)] = (v(2), v(3), v(4), v(5));
+                }
+            }
+        }
+        catch { }
+        return r;
+    }
+
+    /// <summary>
+    /// Persiste a edição da grade (diff pré-preenchido × final): grava o que mudou,
+    /// remove o que voltou ao sugerido; mantém as demais empresas e centros.
+    /// </summary>
+    public static void SalvarEdicaoApropriacao(int empresa,
+        Dictionary<int, (string G, string H, string I, string J)> pre,
+        IEnumerable<(int Centro, string G, string H, string I, string J)> finais)
+    {
+        try
+        {
+            var todas = CarregarTodasApropriacoesLinhas();
+            foreach (var kv in NovasApropriacoesSalvas(pre, finais))
+            {
+                if (kv.Value == null) todas.Remove((empresa, kv.Key));
+                else todas[(empresa, kv.Key)] = kv.Value.Value;
+            }
+            var linhas = new List<string> { "EMPRESA;CENTRO;G;H;I;J" };
+            linhas.AddRange(todas.OrderBy(k => k.Key.Emp).ThenBy(k => k.Key.Centro)
+                .Select(k => $"{k.Key.Emp};{k.Key.Centro};{k.Value.G};{k.Value.H};{k.Value.I};{k.Value.J}"));
+            File.WriteAllLines(ArquivoApropriacaoLinhas, linhas);
+        }
+        catch { }
+    }
+
     /// <summary>Mescla pura: começa na base oficial e sobrepõe o que o usuário salvou.</summary>
     public static Dictionary<int, int> MesclarMapa(Dictionary<int, int> baseOf, Dictionary<int, int> arquivo)
     {
