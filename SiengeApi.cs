@@ -119,6 +119,9 @@ public class SiengeApi
     private static readonly string[] CamposNomeEmpresa = { "name", "tradeName", "nome", "fantasia", "razaoSocial", "companyName", "description", "descricao" };
     private static readonly string[] CamposCodigoDepto = { "departmentId", "id", "code", "codigo" };
     private static readonly string[] CamposNomeDepto = { "departmentName", "name", "nome", "description", "descricao" };
+    private static readonly string[] CamposCodigoPlano = { "id", "code", "codigo" };
+    private static readonly string[] CamposNomePlano = { "name", "nome", "description", "descricao" };
+    private static readonly string[] CamposAtivaPlano = { "flAtiva", "ativa", "active", "flAtivo" };
 
     /// <summary>GET paginado genérico: acumula os itens de todas as páginas (clonados).</summary>
     private async Task<(bool Ok, string Mensagem, List<JsonElement> Itens)> GetTodosAsync(string endpoint, int maxPag, string rotulo)
@@ -239,6 +242,78 @@ public class SiengeApi
             return MapearPares(Desembrulhar(doc.RootElement), CamposCodigoDepto, CamposNomeDepto);
         }
         catch { return new(); }
+    }
+
+    /// <summary>
+    /// Lista os planos financeiros do Sienge (GET /payment-categories).
+    /// O endpoint devolve array puro e ignora paginação: 1 chamada traz tudo (~240KB).
+    /// </summary>
+    public async Task<(bool Ok, string Mensagem, List<(string Id, string Nome, string Ativa)> Planos)> ListarPlanosAsync()
+    {
+        var (ok, msg, itens) = await GetTodosAsync("/payment-categories", 1, "planos");
+        var planos = MapearPlanos(itens);
+        return (ok, ok ? $"{planos.Count} plano(s) lido(s) do Sienge." : msg, planos);
+    }
+
+    /// <summary>Extrai (id, nome, ativa) de planos financeiros (array puro ou envelope).</summary>
+    public static List<(string Id, string Nome, string Ativa)> ExtrairPlanos(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return MapearPlanos(Desembrulhar(doc.RootElement));
+        }
+        catch { return new(); }
+    }
+
+    private static List<(string Id, string Nome, string Ativa)> MapearPlanos(List<JsonElement> itens)
+    {
+        var lista = new List<(string Id, string Nome, string Ativa)>();
+        foreach (var item in itens)
+        {
+            var id = Campo(item, CamposCodigoPlano);
+            if (string.IsNullOrWhiteSpace(id)) continue;
+            lista.Add((id.Trim(), (Campo(item, CamposNomePlano) ?? "").Trim(),
+                (Campo(item, CamposAtivaPlano) ?? "").Trim().ToUpperInvariant()));
+        }
+        return lista;
+    }
+
+    /// <summary>
+    /// Confere os planos da tabela financeira contra o espelho (puro, testável).
+    /// O plano "2.02.01.02" equivale ao id "2020102" (sem pontos).
+    /// Retorna (plano, existe, ativa, nome no Sienge).
+    /// </summary>
+    public static List<(string Plano, bool Existe, bool Ativa, string NomeSienge)> ConferirPlanos(
+        IEnumerable<string> planos, Dictionary<string, (string Nome, string Ativa)> espelho)
+    {
+        var r = new List<(string Plano, bool Existe, bool Ativa, string NomeSienge)>();
+        foreach (var p in planos.Distinct())
+        {
+            var plano = p ?? "";
+            var id = plano.Replace(".", "").Trim();
+            if (espelho.TryGetValue(id, out var e))
+                r.Add((plano, true, e.Ativa == "S", e.Nome));
+            else
+                r.Add((plano, false, false, ""));
+        }
+        return r;
+    }
+
+    /// <summary>
+    /// Valida os PlanoFinanceiro distintos da tabela financeira contra o espelho local.
+    /// </summary>
+    public static List<(string Plano, bool Existe, bool Ativa, string NomeSienge)> ValidarPlanosTabela()
+    {
+        var planos = VerbaFinanceira.Lista()
+            .Select(v => (v.PlanoFinanceiro ?? "").Trim())
+            .Where(p => p != "")
+            .Distinct()
+            .ToList();
+        var (_, lista) = CarregarEspelhoPlanos();
+        var espelho = new Dictionary<string, (string Nome, string Ativa)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in lista) espelho[p.Id] = (p.Nome, p.Ativa);
+        return ConferirPlanos(planos, espelho);
     }
 
     /// <summary>Detalhe de obra/empreendimento (situacao, datas, centros associados).</summary>
@@ -491,6 +566,29 @@ public class SiengeApi
     {
         var (data, linhas) = LerEspelho(ArquivoEspelhoDeptos, 2);
         return (data, linhas.Select(p => (p[0].Trim(), p[1].Trim()))
+            .Where(x => x.Item1 != "").ToList());
+    }
+
+    public static string ArquivoEspelhoPlanos => DbService.ArquivoDados("sienge_planos.csv");
+
+    /// <summary>Salva o espelho de planos financeiros (ID;NOME;ATIVA) com data da consulta.</summary>
+    public static void SalvarEspelhoPlanos(List<(string Id, string Nome, string Ativa)> planos)
+    {
+        try
+        {
+            var linhas = new List<string> { "#atualizado_em=" + DateTime.Now.ToString("yyyy-MM-dd HH:mm") };
+            foreach (var p in planos.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+                linhas.Add($"{p.Id.Trim()};{(p.Nome ?? "").Replace(";", ",")};{(p.Ativa ?? "").Trim().ToUpperInvariant()}");
+            File.WriteAllLines(ArquivoEspelhoPlanos, linhas, Encoding.UTF8);
+        }
+        catch { }
+    }
+
+    /// <summary>Carrega o espelho de planos: (data, lista id/nome/ativa).</summary>
+    public static (DateTime Data, List<(string Id, string Nome, string Ativa)> Planos) CarregarEspelhoPlanos()
+    {
+        var (data, linhas) = LerEspelho(ArquivoEspelhoPlanos, 3);
+        return (data, linhas.Select(p => (p[0].Trim(), p[1].Trim(), p[2].Trim()))
             .Where(x => x.Item1 != "").ToList());
     }
 

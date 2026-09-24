@@ -12,6 +12,7 @@ public class PromptSiengeApi : Form
     private readonly Button _btnTestar = new();
     private readonly Button _btnAtualizar = new();
     private readonly Button _btnImportar = new();
+    private readonly Button _btnPlanos = new();
     private readonly Button _btnOk = new();
     private readonly Button _btnCancelar = new();
     private readonly Label _lblStatus = new();
@@ -60,13 +61,18 @@ public class PromptSiengeApi : Form
 
         _btnAtualizar.Text = "Atualizar do Sienge";
         _btnAtualizar.Location = new System.Drawing.Point(16, 222);
-        _btnAtualizar.Size = new System.Drawing.Size(200, 30);
+        _btnAtualizar.Size = new System.Drawing.Size(130, 30);
         _btnAtualizar.Click += async (s, e) => await AtualizarEspelhoAsync();
 
         _btnImportar.Text = "Importar CSV...";
-        _btnImportar.Location = new System.Drawing.Point(224, 222);
-        _btnImportar.Size = new System.Drawing.Size(196, 30);
+        _btnImportar.Location = new System.Drawing.Point(152, 222);
+        _btnImportar.Size = new System.Drawing.Size(130, 30);
         _btnImportar.Click += (s, e) => ImportarCsv();
+
+        _btnPlanos.Text = "Validar planos";
+        _btnPlanos.Location = new System.Drawing.Point(288, 222);
+        _btnPlanos.Size = new System.Drawing.Size(132, 30);
+        _btnPlanos.Click += (s, e) => ValidarPlanos();
 
         _btnOk.Text = "Salvar";
         _btnOk.Location = new System.Drawing.Point(250, 292);
@@ -83,7 +89,7 @@ public class PromptSiengeApi : Form
         Controls.Add(lblKey); Controls.Add(_txtKey);
         Controls.Add(_btnTestar); Controls.Add(_lblStatus);
         Controls.Add(_lblEspelho);
-        Controls.Add(_btnAtualizar); Controls.Add(_btnImportar);
+        Controls.Add(_btnAtualizar); Controls.Add(_btnImportar); Controls.Add(_btnPlanos);
         Controls.Add(_btnOk); Controls.Add(_btnCancelar);
 
         AcceptButton = _btnOk;
@@ -97,15 +103,18 @@ public class PromptSiengeApi : Form
         var (dO, o) = SiengeApi.CarregarEspelhoObras();
         var (dE, e) = SiengeApi.CarregarEspelhoEmpresas();
         var (dD, d) = SiengeApi.CarregarEspelhoDeptos();
+        var (dP, p) = SiengeApi.CarregarEspelhoPlanos();
         _lblEspelho.Text = $"Espelho: {o.Count} obras ({SiengeApi.IdadeEspelho(dO)}); " +
             $"{e.Count} empresas ({SiengeApi.IdadeEspelho(dE)}); " +
-            $"{d.Count} deptos ({SiengeApi.IdadeEspelho(dD)}).";
+            $"{d.Count} deptos ({SiengeApi.IdadeEspelho(dD)}); " +
+            $"{p.Count} planos ({SiengeApi.IdadeEspelho(dP)}).";
     }
 
     private async Task AtualizarEspelhoAsync()
     {
         _btnAtualizar.Enabled = false;
         _btnImportar.Enabled = false;
+        _btnPlanos.Enabled = false;
         _lblStatus.ForeColor = System.Drawing.Color.DarkOrange;
         _lblStatus.Text = "Buscando obras...";
         try
@@ -131,27 +140,69 @@ public class PromptSiengeApi : Form
             foreach (var o in obras) emp[o.Codigo] = o.Empresa;
             SiengeApi.SalvarEspelhoObras(obras.Select(o => (o.Codigo, o.Nome)).ToList(), emp);
             SiengeApi.SalvarEspelhoEmpresas(empresas);
+            var avisos = new List<string>();
             _lblStatus.Text = "Buscando departamentos...";
             Application.DoEvents();
             var (okD, msgD, deptos) = await api.ListarDepartamentosAsync();
             if (!okD)
-            {
-                _lblStatus.ForeColor = System.Drawing.Color.Red;
-                _lblStatus.Text = msgD + " (obras/empresas salvas; deptos exigem liberação)";
-                AtualizarStatusEspelho();
-                return;
-            }
-            SiengeApi.SalvarEspelhoDeptos(deptos);
+                avisos.Add("deptos exigem liberação (" + msgD + ")");
+            else
+                SiengeApi.SalvarEspelhoDeptos(deptos);
+            _lblStatus.Text = "Buscando planos financeiros...";
+            Application.DoEvents();
+            var (okP, msgP, planos) = await api.ListarPlanosAsync();
+            if (!okP)
+                avisos.Add("planos: " + msgP);
+            else
+                SiengeApi.SalvarEspelhoPlanos(planos);
             SiengeApi.SalvarConfig(Config);
-            _lblStatus.ForeColor = System.Drawing.Color.Green;
-            _lblStatus.Text = $"Espelho atualizado: {obras.Count} obras, {empresas.Count} empresas, {deptos.Count} deptos.";
+            var (_, d2) = SiengeApi.CarregarEspelhoDeptos();
+            var (_, p2) = SiengeApi.CarregarEspelhoPlanos();
+            _lblStatus.ForeColor = avisos.Count == 0
+                ? System.Drawing.Color.Green : System.Drawing.Color.DarkOrange;
+            _lblStatus.Text = $"Espelho atualizado: {obras.Count} obras, {empresas.Count} empresas, " +
+                $"{d2.Count} deptos, {p2.Count} planos." +
+                (avisos.Count > 0 ? " " + string.Join(" ", avisos) : "");
             AtualizarStatusEspelho();
         }
         finally
         {
             _btnAtualizar.Enabled = true;
             _btnImportar.Enabled = true;
+            _btnPlanos.Enabled = true;
         }
+    }
+
+    /// <summary>
+    /// Valida os planos financeiros da tabela financeira (VerbaFinanceira)
+    /// contra o espelho local (offline). Mostra resumo + detalhes se houver falha.
+    /// </summary>
+    private void ValidarPlanos()
+    {
+        var (data, lista) = SiengeApi.CarregarEspelhoPlanos();
+        if (lista.Count == 0)
+        {
+            _lblStatus.ForeColor = System.Drawing.Color.DarkOrange;
+            _lblStatus.Text = "Sem espelho de planos: use Atualizar do Sienge primeiro.";
+            return;
+        }
+        var conf = SiengeApi.ValidarPlanosTabela();
+        int ok = conf.Count(x => x.Existe && x.Ativa);
+        if (ok == conf.Count)
+        {
+            _lblStatus.ForeColor = System.Drawing.Color.Green;
+            _lblStatus.Text = $"Planos: {ok}/{conf.Count} OK e ativos ({SiengeApi.IdadeEspelho(data)}).";
+            return;
+        }
+        _lblStatus.ForeColor = System.Drawing.Color.Red;
+        _lblStatus.Text = $"Planos: {ok}/{conf.Count} OK - ver detalhes.";
+        var linhas = conf.Where(x => !x.Existe || !x.Ativa)
+            .Select(x => $"{x.Plano}: " + (!x.Existe ? "NÃO EXISTE no Sienge" : $"INATIVO ({x.NomeSienge})"));
+        MessageBox.Show(this,
+            $"Planos com problema ({conf.Count - ok}/{conf.Count}):\n\n" +
+            string.Join("\n", linhas) +
+            $"\n\nEspelho {SiengeApi.IdadeEspelho(data)}.",
+            "Planos financeiros", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private void ImportarCsv()
