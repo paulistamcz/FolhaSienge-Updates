@@ -125,7 +125,30 @@ public class PromptApropriacaoLinhas : Form
 
         AcceptButton = _btnOk;
         CancelButton = _btnCancelar;
-        UiAjuste.CaberNaTela(this);
+        // Se fechar (X/Esc/Cancelar) com edição não confirmada, avisa antes de descartar.
+        FormClosing += (s, e) =>
+        {
+            if (DialogResult == DialogResult.OK) return;
+            _dgv.EndEdit();
+            for (int i = 0; i < _dt.Rows.Count && i < _linhas.Count; i++)
+            {
+                var r = _dt.Rows[i];
+                var l = _linhas[i];
+                if ((Convert.ToString(r["G"]) ?? "") != l.G ||
+                    (Convert.ToString(r["H"]) ?? "") != l.H ||
+                    (Convert.ToString(r["I"]) ?? "") != l.I ||
+                    (Convert.ToString(r["J"]) ?? "") != l.J)
+                {
+                    var resp = MessageBox.Show(this,
+                        "Há edições na grade que ainda não foram confirmadas.\n\n" +
+                        "Sim = descartar e sair.\nNão = voltar para a grade (use OK para salvar).",
+                        "Apropriação", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    if (resp != DialogResult.Yes)
+                        e.Cancel = true;
+                    return;
+                }
+            }
+        };
     }
 
     private void ReposicionarLabelTotal(Panel topo)
