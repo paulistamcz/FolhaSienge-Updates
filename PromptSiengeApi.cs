@@ -163,8 +163,9 @@ public class PromptSiengeApi : Form
             _lblStatus.Text = $"Espelho atualizado: {obras.Count} obras, {empresas.Count} empresas, " +
                 $"{d2.Count} deptos, {p2.Count} planos." +
                 (avisos.Count > 0 ? " " + string.Join(" ", avisos) : "");
-            AtualizarStatusEspelho();
-        }
+        AtualizarStatusEspelho();
+        UiAjuste.CaberNaTela(this);
+    }
         finally
         {
             _btnAtualizar.Enabled = true;

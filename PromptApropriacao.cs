@@ -126,6 +126,7 @@ public class PromptApropriacao : Form
 
         AcceptButton = _btnOk;
         CancelButton = _btnCancelar;
+        UiAjuste.CaberNaTela(this);
     }
 
     /// <summary>Mostra o nome do departamento no espelho para conferência.</summary>

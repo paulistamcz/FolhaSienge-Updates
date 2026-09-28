@@ -143,6 +143,7 @@ public class RelatorioDominioSienge : Form
 
         AcceptButton = _btnFechar;
         CancelButton = _btnFechar;
+        UiAjuste.CaberNaTela(this);
 
         // Busca automática ao abrir, se a API já estiver configurada (sem pedir nada).
         Shown += async (s, e) => await BuscarAutomaticaAsync();

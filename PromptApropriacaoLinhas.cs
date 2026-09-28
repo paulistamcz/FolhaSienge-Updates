@@ -125,6 +125,7 @@ public class PromptApropriacaoLinhas : Form
 
         AcceptButton = _btnOk;
         CancelButton = _btnCancelar;
+        UiAjuste.CaberNaTela(this);
     }
 
     private void ReposicionarLabelTotal(Panel topo)

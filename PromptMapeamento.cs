@@ -144,6 +144,7 @@ public class PromptMapeamento : Form
 
         AcceptButton = _btnOk;
         CancelButton = _btnCancelar;
+        UiAjuste.CaberNaTela(this);
     }
 
     private void Validar()

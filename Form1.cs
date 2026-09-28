@@ -14,10 +14,12 @@ public partial class Form1 : Form
     private string? _csvGeradoFolha;
     private string? _csvGeradoGuias;
     private bool _carregandoEmpresas;
+    private readonly ToolTip _tipCentro = new() { AutoPopDelay = 10000 };
 
     public Form1()
     {
         InitializeComponent();
+        UiAjuste.CaberNaTela(this);
         this.Shown += Form1_Shown;
         dgvGrf.CurrentCellDirtyStateChanged += dgvGrf_CellDirty;
         CarregarVerbas();
@@ -454,6 +456,47 @@ public partial class Form1 : Form
         }
         catch { }
         cmbFolhaCentro.SelectedIndex = 0;
+        AjustarCentroDropDown();
+    }
+
+    /// <summary>
+    /// Alarga a lista suspensa do combo de centro para caber o nome completo
+    /// (sem mexer na largura do controle) e mostra o nome todo no tooltip.
+    /// </summary>
+    private void AjustarCentroDropDown()
+    {
+        try
+        {
+            int w = cmbFolhaCentro.Width;
+            foreach (var it in cmbFolhaCentro.Items)
+            {
+                string t = it?.ToString() ?? "";
+                if (t == "") continue;
+                int tw = TextRenderer.MeasureText(t, cmbFolhaCentro.Font).Width
+                    + SystemInformation.VerticalScrollBarWidth + 12;
+                if (tw > w) w = tw;
+            }
+            int maxLarg = 620;
+            try
+            {
+                maxLarg = Math.Min(maxLarg,
+                    System.Windows.Forms.Screen.FromControl(cmbFolhaCentro).WorkingArea.Width - 40);
+            }
+            catch { }
+            cmbFolhaCentro.DropDownWidth = Math.Max(cmbFolhaCentro.Width, Math.Min(w, Math.Max(200, maxLarg)));
+        }
+        catch { }
+        AtualizarTipCentro();
+    }
+
+    private void AtualizarTipCentro()
+    {
+        try
+        {
+            string t = cmbFolhaCentro.SelectedItem?.ToString() ?? "";
+            _tipCentro.SetToolTip(cmbFolhaCentro, t);
+        }
+        catch { }
     }
 
     /// <summary>Retorna o tipo de processo da folha conforme a seleção: Quinzena = 41, demais = 11.</summary>
@@ -465,6 +508,7 @@ public partial class Form1 : Form
     private void cmbFolhaCentro_SelectedIndexChanged(object sender, EventArgs e)
     {
         // Ao mudar o centro na aba Folha, não faz nada automático; só informa o filtro.
+        AtualizarTipCentro();
     }
 
     /// <summary>

@@ -660,6 +660,7 @@ partial class Form1
         // cmbFolhaCentro
         // 
         this.cmbFolhaCentro.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbFolhaCentro.DropDownWidth = 420;
         this.cmbFolhaCentro.Location = new System.Drawing.Point(518, 22);
         this.cmbFolhaCentro.Name = "cmbFolhaCentro";
         this.cmbFolhaCentro.Size = new System.Drawing.Size(150, 23);
@@ -1099,6 +1100,7 @@ partial class Form1
         // 
         this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
         this.AutoScaleMode = AutoScaleMode.Font;
+        this.AutoScroll = true;
         this.ClientSize = new System.Drawing.Size(984, 1050);
         this.Controls.Add(this.btnSair);
         this.Controls.Add(this.tabExport);
@@ -1107,7 +1109,7 @@ partial class Form1
         this.Controls.Add(this.grpBanco);
         this.Name = "Form1";
         this.StartPosition = FormStartPosition.CenterScreen;
-        this.MinimumSize = new System.Drawing.Size(984, 900);
+        this.MinimumSize = new System.Drawing.Size(800, 600);
         this.Text = "Plus Informática - Folha de Pagamento (Plus Contabilidade)";
         // 
         // btnSair

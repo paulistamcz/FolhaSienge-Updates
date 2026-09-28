@@ -110,6 +110,7 @@ public class PromptCredor : Form
 
         AcceptButton = _btnOk;
         CancelButton = _btnCancelar;
+        UiAjuste.CaberNaTela(this);
     }
 
     /// <summary>Código final (primeira linha marcada).</summary>
