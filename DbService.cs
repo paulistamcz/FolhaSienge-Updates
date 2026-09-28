@@ -96,8 +96,10 @@ public class DbService
 
     /// <summary>
     /// Calcula o que persistir da grade: para cada centro, o valor final quando
-    /// difere do pré-preenchido (edição do usuário) ou null quando voltou ao
-    /// sugerido (limpa o salvo). Última linha do centro vence.
+    /// difere do BASELINE (pré-preenchido sem a camada salva) ou null quando
+    /// voltou ao baseline (limpa o salvo). Última linha do centro vence.
+    /// IMPORTANTE: comparar contra o baseline, nunca contra o exibido (que já
+    /// inclui o salvo) — senão reabrir sem mexer apagaria a personalização.
     /// </summary>
     public static Dictionary<int, (string G, string H, string I, string J)?> NovasApropriacoesSalvas(
         Dictionary<int, (string G, string H, string I, string J)> pre,
@@ -246,6 +248,34 @@ public class DbService
     /// O item (I) sai só com números (remove prefixo "ITEM " da planilha).</summary>
     public static (string G, string H, string I)? PadraoApropriacao(int empresa, int centro) =>
         BaseOficialCentros.TryGetValue((empresa, centro), out var v) ? (v.G, v.H, NormalizarItem(v.I)) : null;
+
+    /// <summary>
+    /// Pré-preenchimento de uma linha da grade (puro, testável).
+    /// G é automático = B (centro Sienge mapeado); H/I vêm do salvo, do oficial
+    /// ou do lembrado; J do salvo ou do lembrado. Informado agora vence tudo.
+    /// Precedência: informado &gt; salvo na grade &gt; B automático (G) /
+    /// oficial (H/I) &gt; lembrado (só quando tudo vazio).
+    /// </summary>
+    public static (string G, string H, string I, string J) PrefillLinha(
+        int empresa, int centro, int b,
+        string gInf, string hInf, string iInf, string jInf,
+        string g0, string h0, string i0, string j0, bool tudoVazio,
+        Dictionary<int, (string G, string H, string I, string J)>? salvos)
+    {
+        string? gs = null, hs = null, is2 = null, js = null;
+        bool temSalvo = false;
+        if (salvos != null && salvos.TryGetValue(centro, out var sv))
+        {
+            temSalvo = true;
+            gs = sv.G; hs = sv.H; is2 = sv.I; js = sv.J;
+        }
+        var pad = PadraoApropriacao(empresa, centro);
+        string G = gInf != "" ? gInf : (gs ?? b.ToString());
+        string H = hInf != "" ? hInf : (temSalvo ? hs! : (pad != null ? pad.Value.H : (tudoVazio ? h0 : "")));
+        string I = iInf != "" ? iInf : (temSalvo ? is2! : (pad != null ? pad.Value.I : (tudoVazio ? i0 : "")));
+        string J = jInf != "" ? jInf : (temSalvo ? js! : (tudoVazio ? j0 : ""));
+        return (G, H, I, J);
+    }
 
     /// <summary>Item do orçamento só com números: remove prefixo "ITEM " (qualquer caixa) e aparas.</summary>
     public static string NormalizarItem(string item)

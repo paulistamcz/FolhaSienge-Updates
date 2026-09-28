@@ -582,9 +582,10 @@ public partial class Form1 : Form
 
     /// <summary>
     /// Monta as linhas da grade de apropriação (B do mapa + G/H/I/J informados,
-    /// ou a personalização salva da grade, ou o padrão oficial da base,
+    /// ou a personalização salva da grade, ou G automático = B com H/I oficiais,
     /// ou os lembrados quando vazios).
-    /// Precedência por campo: informado &gt; salvo na grade &gt; base oficial &gt; lembrado.
+    /// Precedência: informado &gt; salvo na grade &gt; B automático (G) /
+    /// oficial (H/I) &gt; lembrado.
     /// </summary>
     private static List<LinhaApropriacao> MontarGradeApropriacao(
         IEnumerable<(int Indice, string Desc, int Centro, decimal Valor)> src,
@@ -595,21 +596,27 @@ public partial class Form1 : Form
         var salvos = DbService.CarregarApropriacaoLinhas(DbService.Empresa);
         return src.Select(s =>
         {
-            var pad = DbService.PadraoApropriacao(DbService.Empresa, s.Centro);
-            var sv = salvos.TryGetValue(s.Centro, out var v)
-                ? ((string G, string H, string I, string J)?)v : null;
+            int b = DbService.CentroCsv(s.Centro);
+            var (g, h, i, j) = DbService.PrefillLinha(DbService.Empresa, s.Centro, b,
+                gInf, hInf, iInf, jInf, g0, h0, i0, j0, tudoVazio, salvos);
+            var (bg, bh, bi, bj) = DbService.PrefillLinha(DbService.Empresa, s.Centro, b,
+                "", "", "", "", g0, h0, i0, j0, tudoVazio, null);
             return new LinhaApropriacao
             {
                 Indice = s.Indice,
                 Descricao = s.Desc,
                 Centro = s.Centro,
                 Valor = s.Valor,
-                B = DbService.CentroCsv(s.Centro),
-                G = gInf != "" ? gInf : (sv?.G ?? pad?.G ?? (tudoVazio ? g0 : "")),
-                H = hInf != "" ? hInf : (sv != null ? sv.Value.H : (pad != null ? pad.Value.H : (tudoVazio ? h0 : ""))),
-                I = iInf != "" ? iInf : (sv != null ? sv.Value.I : (pad != null ? pad.Value.I : (tudoVazio ? i0 : ""))),
-                J = jInf != "" ? jInf : (sv?.J ?? (tudoVazio ? j0 : "")),
-                Sel = true
+                B = b,
+                G = g,
+                H = h,
+                I = i,
+                J = j,
+                Sel = true,
+                BaseG = bg,
+                BaseH = bh,
+                BaseI = bi,
+                BaseJ = bj
             };
         }).ToList();
     }
@@ -621,9 +628,11 @@ public partial class Form1 : Form
     /// </summary>
     private List<LinhaApropriacao>? ExibirGradeApropriacao(List<LinhaApropriacao> grade, string titulo)
     {
+        // Baseline do diff: o pré-preenchido SEM a camada salva (Base*), para que
+        // reabrir sem mexer mantenha o salvo em vez de apagá-lo.
         var pre = new Dictionary<int, (string G, string H, string I, string J)>();
         foreach (var l in grade)
-            if (!pre.ContainsKey(l.Centro)) pre[l.Centro] = (l.G, l.H, l.I, l.J);
+            if (!pre.ContainsKey(l.Centro)) pre[l.Centro] = (l.BaseG, l.BaseH, l.BaseI, l.BaseJ);
         using var dlg = new PromptApropriacaoLinhas(grade, titulo);
         if (dlg.ShowDialog(this) != DialogResult.OK) return null;
         DbService.SalvarEdicaoApropriacao(DbService.Empresa, pre,

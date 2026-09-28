@@ -16,6 +16,11 @@ public class LinhaApropriacao
     public string I { get; set; } = "";
     public string J { get; set; } = "";
     public bool Sel { get; set; } = true;
+    /// <summary>Pré-preenchimento sem a camada salva (base do diff: oficial/B-auto/lembrado).</summary>
+    public string BaseG { get; set; } = "";
+    public string BaseH { get; set; } = "";
+    public string BaseI { get; set; } = "";
+    public string BaseJ { get; set; } = "";
 }
 
 /// <summary>
