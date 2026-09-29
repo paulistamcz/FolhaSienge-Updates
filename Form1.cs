@@ -1549,7 +1549,8 @@ public partial class Form1 : Form
                 "FGTS" => "58",
                 "IRRF" => "010",
                 "GRRF" => "59",
-                _ => descricao, // ECONSIGNADO e outros: mantém até confirmar o código
+                "ECONSIGNADO" => "37",
+                _ => descricao, // outros: mantém até confirmar o código
             };
             string codCredor, nomeCredor;
             switch (descricao.ToUpperInvariant())
@@ -1568,7 +1569,7 @@ public partial class Form1 : Form
                 "INSS" => 2,
                 "FGTS" => 58,
                 "IRRF" => 10,
-                "ECONSIGNADO" => 0,
+                "ECONSIGNADO" => 37,
                 _ => 59, // GRRF
             };
             // Documento (K): o digitado, ou base automática RRRRVVVCCCDDMMAA.
