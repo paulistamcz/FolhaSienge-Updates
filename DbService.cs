@@ -2213,24 +2213,32 @@ public class DbService
     /// <summary>
     /// Gera o CSV do lote GRRF no formato da planilha manual, com doc e obs
     /// estilo folha (base RRRRVVVCCCDDMMAA + sequência; obs compacta).
-    /// Layout: 59;centro;37;GRRF;valor;vencimento;;;;;doc;REF. A GRRF MM/AAAA - NOME
+    /// Layout: 59;centro;37;GRRF;valor;vencimento;G;H;I;J;doc;REF. A GRRF MM/AAAA - NOME
+    /// B e G/H/I/J vêm da grade por linha (lógica da Folha); o centro digitado
+    /// no lote, se preenchido, vale como B de todas as linhas.
     /// </summary>
     public static string GerarCsvGrf(
         List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)> linhas,
-        string centro, DateTime dataLote, string verba = "59")
+        string centro, DateTime dataLote, string verba = "59",
+        IReadOnlyList<(string B, string G, string H, string I, string J)>? apropriacoes = null)
     {
         var sb = new System.Text.StringBuilder();
         string comp = dataLote.ToString("MM/yyyy", CultureInfo.InvariantCulture);
         string docBase = GerarDocBase(59, "37", DateTime.Now, Random.Shared.Next(1000, 10000));
         bool numera = linhas.Count > 1;
-        int n = 1;
+        int n = 1, idx = 0;
         foreach (var l in linhas)
         {
+            var ap = (apropriacoes != null && idx < apropriacoes.Count)
+                ? apropriacoes[idx]
+                : (B: "", G: "", H: "", I: "", J: "");
+            idx++;
+            var bLinha = !string.IsNullOrWhiteSpace(centro) ? centro.Trim() : ap.B;
             var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
             var venc = l.Vencimento.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
             var docLinha = numera ? $"{docBase} {n}" : docBase;
             var obs = ObsRef("GRRF", comp, l.Nome);
-            sb.AppendLine(LinhaCsv(verba, centro, "37", "GRRF", valor, venc, "", "", "", "", docLinha, obs));
+            sb.AppendLine(LinhaCsv(verba, bLinha, "37", "GRRF", valor, venc, ap.G, ap.H, ap.I, ap.J, docLinha, obs));
             n++;
         }
         return sb.ToString();

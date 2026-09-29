@@ -1029,7 +1029,24 @@ public partial class Form1 : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        _csvGeradoGrf = DbService.GerarCsvGrf(selecionadas, centro, lote);
+        // Lógica da Folha: B mapeado + grade G/H/I/J por linha (o centro
+        // digitado no lote, se preenchido, vale como B de todas as linhas).
+        if (!PedirMapaCentros(selecionadas.Select(x => x.ICcustos))) return;
+        var gradeGrf = MontarGradeApropriacao(selecionadas.Select((x, i) =>
+            (Indice: i, Desc: $"{x.IEmpregados} - {x.Nome}", Centro: x.ICcustos, Valor: x.Valor)));
+        var selGrf = ExibirGradeApropriacao(gradeGrf, "Apropriação - GRRF");
+        if (selGrf == null) return;
+        var apGrf = selGrf.ToDictionary(r => r.Indice);
+        var linhasGrfOut = new List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)>();
+        var apGrfOut = new List<(string B, string G, string H, string I, string J)>();
+        for (int idx = 0; idx < selecionadas.Count; idx++)
+        {
+            if (!apGrf.TryGetValue(idx, out var r)) continue;
+            linhasGrfOut.Add(selecionadas[idx]);
+            apGrfOut.Add((r.B.ToString("D4"), r.G, r.H, r.I, r.J));
+        }
+        if (linhasGrfOut.Count == 0) return;
+        _csvGeradoGrf = DbService.GerarCsvGrf(linhasGrfOut, centro, lote, "59", apGrfOut);
         MostrarPrevia(txtResultadoGrf, _csvGeradoGrf);
         btnSalvarGrf.Enabled = true;
     }
@@ -1595,21 +1612,32 @@ public partial class Form1 : Form
                     return;
                 }
 
+                if (!PedirMapaCentros(analiticoLinhas.Select(x => x.Centro))) return;
+                // Grade única (lógica da Folha): B mapeado + G/H/I/J por linha,
+                // partindo do diálogo único. Seleção da grade filtra as linhas.
+                var gradeGuias = MontarGradeApropriacao(analiticoLinhas.Select((x, i) =>
+                    (Indice: i, Desc: $"{x.Empregado} - {x.NomeEmpregado}", Centro: x.Centro, Valor: x.Valor)),
+                    obra, unidade, itemOrc, departamento);
+                var selGuias = ExibirGradeApropriacao(gradeGuias, $"Apropriação - Guias {descricao}");
+                if (selGuias == null) return;
+                var apGuias = selGuias.ToDictionary(r => r.Indice);
                 var sb = new System.Text.StringBuilder();
                 int seq = 1;
                 // Numera o documento só quando o arquivo tem +1 linha.
-                bool numera = analiticoLinhas.Count > 1;
-                foreach (var l in analiticoLinhas)
+                bool numera = selGuias.Count > 1;
+                for (int idx = 0; idx < analiticoLinhas.Count; idx++)
                 {
-                    var cc = l.Centro.ToString("D4");
+                    if (!apGuias.TryGetValue(idx, out var ap)) continue;
+                    var l = analiticoLinhas[idx];
+                    var cc = ap.B.ToString("D4");
                     var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
                     var docLinha = numera ? $"{doc} {seq}" : doc;
                     seq++;
-                    sb.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, docLinha, DbService.ObsRef(descricao.ToUpperInvariant(), comp, l.NomeEmpregado)));
+                    sb.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, ap.G, ap.H, ap.I, ap.J, docLinha, DbService.ObsRef(descricao.ToUpperInvariant(), comp, l.NomeEmpregado)));
                 }
                 _csvGeradoGuias = sb.ToString();
                 MostrarPrevia(txtResultadoGuias, _csvGeradoGuias);
-                decimal tot = analiticoLinhas.Sum(x => x.Valor);
+                decimal tot = selGuias.Sum(x => x.Valor);
                 lblTotalGuias.Text = $"Total: R$ {tot.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
                 btnSalvarGuias.Enabled = true;
 
@@ -1618,8 +1646,11 @@ public partial class Form1 : Form
                 dt.Columns.Add("Empregado", typeof(int));
                 dt.Columns.Add("Nome", typeof(string));
                 dt.Columns.Add("Valor", typeof(decimal));
-                foreach (var l in analiticoLinhas)
-                    dt.Rows.Add(l.Centro.ToString("D4"), l.Empregado, l.NomeEmpregado, l.Valor);
+                foreach (var r in selGuias)
+                {
+                    var l = analiticoLinhas[r.Indice];
+                    dt.Rows.Add(r.B.ToString("D4"), l.Empregado, l.NomeEmpregado, l.Valor);
+                }
                 dgvGuias.DataSource = dt;
                 dgvGuias.Columns["Centro"].Width = 70;
                 dgvGuias.Columns["Empregado"].Width = 80;
@@ -1663,22 +1694,34 @@ public partial class Form1 : Form
                     return;
                 }
 
+                // Nomes dos centros para a grade (lógica da Folha).
+                linhasCompletas = linhasCompletas
+                    .Select(l => (l.Centro, Nome: string.IsNullOrWhiteSpace(l.Nome) ? svc.NomeCentroCusto(_conn!, l.Centro) : l.Nome, l.Total))
+                    .ToList();
+                if (!PedirMapaCentros(linhasCompletas.Select(x => x.Centro))) return;
+                var gradeGuiasC = MontarGradeApropriacao(linhasCompletas.Select((x, i) =>
+                    (Indice: i, Desc: $"{x.Centro:D4} - {x.Nome}", Centro: x.Centro, Valor: x.Total)),
+                    obra, unidade, itemOrc, departamento);
+                var selGuiasC = ExibirGradeApropriacao(gradeGuiasC, $"Apropriação - Guias {descricao}");
+                if (selGuiasC == null) return;
+                var apGuiasC = selGuiasC.ToDictionary(r => r.Indice);
                 var sb2 = new System.Text.StringBuilder();
                 int i = 1;
                 // Numera o documento só quando o arquivo tem +1 linha.
-                bool numera2 = linhasCompletas.Count > 1;
-                foreach (var l in linhasCompletas)
+                bool numera2 = selGuiasC.Count > 1;
+                for (int idx = 0; idx < linhasCompletas.Count; idx++)
                 {
-                    var cc = l.Centro.ToString("D4");
+                    if (!apGuiasC.TryGetValue(idx, out var ap)) continue;
+                    var l = linhasCompletas[idx];
+                    var cc = ap.B.ToString("D4");
                     var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
-                    string nomeCentro = string.IsNullOrWhiteSpace(l.Nome) ? svc.NomeCentroCusto(_conn!, l.Centro) : l.Nome;
                     var docLinha2 = numera2 ? $"{doc} {i}" : doc;
-                    sb2.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, obra, unidade, itemOrc, departamento, docLinha2, DbService.ObsRef(descricao.ToUpperInvariant(), comp, "CENTRO DE CUSTO: " + nomeCentro)));
+                    sb2.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, ap.G, ap.H, ap.I, ap.J, docLinha2, DbService.ObsRef(descricao.ToUpperInvariant(), comp, "CENTRO DE CUSTO: " + l.Nome)));
                     i++;
                 }
                 _csvGeradoGuias = sb2.ToString();
                 MostrarPrevia(txtResultadoGuias, _csvGeradoGuias);
-                decimal total2 = linhasCompletas.Sum(x => x.Total);
+                decimal total2 = selGuiasC.Sum(x => x.Valor);
                 lblTotalGuias.Text = $"Total: R$ {total2.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
                 btnSalvarGuias.Enabled = true;
 
@@ -1686,8 +1729,11 @@ public partial class Form1 : Form
                 dt2.Columns.Add("Centro", typeof(string));
                 dt2.Columns.Add("Nome", typeof(string));
                 dt2.Columns.Add("Total", typeof(decimal));
-                foreach (var l in linhasCompletas)
-                    dt2.Rows.Add(l.Centro.ToString("D4"), string.IsNullOrWhiteSpace(l.Nome) ? svc.NomeCentroCusto(_conn!, l.Centro) : l.Nome, l.Total);
+                foreach (var r in selGuiasC)
+                {
+                    var l = linhasCompletas[r.Indice];
+                    dt2.Rows.Add(r.B.ToString("D4"), l.Nome, l.Total);
+                }
                 dgvGuias.DataSource = dt2;
                 dgvGuias.Columns["Centro"].Width = 70;
                 dgvGuias.Columns["Nome"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
