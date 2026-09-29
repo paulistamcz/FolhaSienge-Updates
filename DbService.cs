@@ -1011,25 +1011,38 @@ public class DbService
     /// <summary>
     /// Guia analítica por funcionário para eCONSIGNADO (empréstimos) ou GRRF (rescisão).
     /// Retorna (Centro, NomeEmpregado, Empregado, Valor).
+    /// Com competência (MM/AAAA), filtra o mês (fomovto acumula meses); sem ela, soma tudo.
     /// </summary>
     public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
-        GuiaAnaliticoEmprestimos(OdbcConnection conn, int classeEmprestimo = 0)
+        GuiaAnaliticoEmprestimos(OdbcConnection conn, int classeEmprestimo = 0, string comp = "")
     {
         var lista = new List<(int, string, int, decimal)>();
         string filtroClasse = classeEmprestimo > 0
             ? " AND ev.classificacao = ?"
             : " AND ev.nome LIKE 'DESC. EMP. CRED. TRAB%'";
+        string filtroComp = "";
+        string sql = "";
+        if (!string.IsNullOrWhiteSpace(comp))
+        {
+            sql = CompetenciaParaSql(comp);
+            filtroComp = " AND m.data >= ? AND m.data < DATEADD(month,1,?)";
+        }
         using var cmd = new OdbcCommand(
             "SELECT e.i_ccustos, TRIM(e.nome), m.i_empregados, ROUND(SUM(m.valor_cal),2) " +
             "FROM bethadba.fomovto m " +
             "LEFT JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
             "LEFT JOIN bethadba.foempregados e ON m.codi_emp = e.codi_emp AND m.i_empregados = e.i_empregados " +
             "WHERE m.codi_emp = " + DbService.Empresa + " AND m.tipo_proces = 11 " +
-            "AND m.prov_desc = 'D'" + filtroClasse +
+            "AND m.prov_desc = 'D'" + filtroClasse + filtroComp +
             " GROUP BY e.i_ccustos, e.nome, m.i_empregados " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         if (classeEmprestimo > 0)
             cmd.Parameters.AddWithValue("cls", classeEmprestimo);
+        if (filtroComp != "")
+        {
+            cmd.Parameters.AddWithValue("ini", sql);
+            cmd.Parameters.AddWithValue("fim", sql);
+        }
         using var rd = cmd.ExecuteReader();
         while (rd.Read())
         {

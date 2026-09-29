@@ -1540,7 +1540,7 @@ public partial class Form1 : Form
                 case "INSS": codCredor = "298"; nomeCredor = "MINISTERIO DA FAZENDA"; break;
                 case "IRRF": codCredor = "298"; nomeCredor = "MINISTERIO DA FAZENDA"; break;
                 case "FGTS": codCredor = "37"; nomeCredor = "CAIXA ECONOMICA FEDERAL"; break;
-                case "ECONSIGNADO": codCredor = ""; nomeCredor = "CAIXA ECONOMICA FEDERAL"; break;
+                case "ECONSIGNADO": codCredor = "37"; nomeCredor = "CAIXA ECONOMICA FEDERAL"; break;
                 default: codCredor = "37"; nomeCredor = "GRRF"; break;
             }
             if (string.IsNullOrWhiteSpace(codCredor)) codCredor = "1";
@@ -1579,7 +1579,7 @@ public partial class Form1 : Form
                         analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoPorClasse(_conn, comp, 14), x => x.Centro, centrosFiltro);
                         break;
                     case "ECONSIGNADO":
-                        analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoEmprestimos(_conn, 49), x => x.Centro, centrosFiltro);
+                        analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoEmprestimos(_conn, 49, comp), x => x.Centro, centrosFiltro);
                         break;
                     case "GRRF":
                         analiticoLinhas = FiltrarPorCentro(
@@ -1646,7 +1646,7 @@ public partial class Form1 : Form
                         "INSS" => svc.GuiaAnaliticoPorClasse(_conn, comp, 12),
                         "IRRF" => svc.GuiaAnaliticoPorClasse(_conn, comp, 13),
                         "FGTS" => svc.GuiaAnaliticoPorClasse(_conn, comp, 14),
-                        _ => svc.GuiaAnaliticoEmprestimos(_conn, 49),
+                        _ => svc.GuiaAnaliticoEmprestimos(_conn, 49, comp),
                     };
                     var agrupado = analiticoTodos
                         .Where(l => centrosFiltro.Count == 0 || centrosFiltro.Contains(l.Centro))
