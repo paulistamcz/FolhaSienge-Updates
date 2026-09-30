@@ -71,6 +71,7 @@ partial class Form1
     private Label lblTotalGrf;
     private DataGridView dgvGrf;
     private TextBox txtResultadoGrf;
+    private SplitContainer splitGrf;
 
     private GroupBox grpFolha;
     private Label lblFolhaTipo;
@@ -84,6 +85,7 @@ partial class Form1
     private Label lblTotalFolha;
     private DataGridView dgvFolha;
     private TextBox txtResultadoFolha;
+    private SplitContainer splitFolha;
     private Label lblFolhaPeriodo;
     private MaskedTextBox mtbFolhaIni;
     private Label lblFolhaAte;
@@ -103,6 +105,7 @@ partial class Form1
     private Label lblTotalGuias;
     private DataGridView dgvGuias;
     private TextBox txtResultadoGuias;
+    private SplitContainer splitGuias;
 
     private TabControl tabExport;
     private TabPage tabConsolidar;
@@ -169,6 +172,7 @@ partial class Form1
         this.lblTotalGrf = new Label();
         this.dgvGrf = new DataGridView();
         this.txtResultadoGrf = new TextBox();
+        this.splitGrf = new SplitContainer();
         this.grpFolha = new GroupBox();
         this.lblFolhaTipo = new Label();
         this.cmbFolhaTipo = new ComboBox();
@@ -181,6 +185,7 @@ partial class Form1
         this.lblTotalFolha = new Label();
         this.dgvFolha = new DataGridView();
         this.txtResultadoFolha = new TextBox();
+        this.splitFolha = new SplitContainer();
         this.lblFolhaPeriodo = new Label();
         this.mtbFolhaIni = new MaskedTextBox();
         this.lblFolhaAte = new Label();
@@ -199,6 +204,7 @@ partial class Form1
         this.lblTotalGuias = new Label();
         this.dgvGuias = new DataGridView();
         this.txtResultadoGuias = new TextBox();
+        this.splitGuias = new SplitContainer();
         this.tabExport = new TabControl();
         this.tabConsolidar = new TabPage();
         this.tabGrf = new TabPage();
@@ -611,8 +617,9 @@ partial class Form1
         this.grpFolha.Controls.Add(this.btnGerarFolha);
         this.grpFolha.Controls.Add(this.btnSalvarFolha);
         this.grpFolha.Controls.Add(this.lblTotalFolha);
-        this.grpFolha.Controls.Add(this.dgvFolha);
-        this.grpFolha.Controls.Add(this.txtResultadoFolha);
+        this.grpFolha.Controls.Add(this.splitFolha);
+        this.splitFolha.Panel1.Controls.Add(this.dgvFolha);
+        this.splitFolha.Panel2.Controls.Add(this.txtResultadoFolha);
         this.grpFolha.Controls.Add(this.lblFolhaPeriodo);
         this.grpFolha.Controls.Add(this.mtbFolhaIni);
         this.grpFolha.Controls.Add(this.lblFolhaAte);
@@ -773,26 +780,31 @@ partial class Form1
         // 
         // dgvFolha
         // 
-        this.dgvFolha.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.dgvFolha.Dock = DockStyle.Fill;
         this.dgvFolha.AllowUserToAddRows = false;
         this.dgvFolha.AllowUserToDeleteRows = false;
-        this.dgvFolha.Location = new System.Drawing.Point(16, 84);
         this.dgvFolha.Name = "dgvFolha";
         this.dgvFolha.RowHeadersVisible = false;
-        this.dgvFolha.Size = new System.Drawing.Size(928, 124);
         this.dgvFolha.TabIndex = 7;
         // 
         // txtResultadoFolha
         // 
-        this.txtResultadoFolha.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
-        this.txtResultadoFolha.Location = new System.Drawing.Point(16, 214);
+        this.txtResultadoFolha.Dock = DockStyle.Fill;
         this.txtResultadoFolha.Multiline = true;
         this.txtResultadoFolha.Name = "txtResultadoFolha";
         this.txtResultadoFolha.ReadOnly = true;
         this.txtResultadoFolha.ScrollBars = ScrollBars.Both;
-        this.txtResultadoFolha.Size = new System.Drawing.Size(928, 56);
         this.txtResultadoFolha.TabIndex = 8;
         this.txtResultadoFolha.Font = new System.Drawing.Font("Consolas", 9F);
+        // 
+        // splitFolha
+        // 
+        this.splitFolha.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.splitFolha.Location = new System.Drawing.Point(16, 84);
+        this.splitFolha.Name = "splitFolha";
+        this.splitFolha.Size = new System.Drawing.Size(928, 210);
+        this.splitFolha.SplitterDistance = 120;
+        this.splitFolha.TabIndex = 9;
         // 
         // grpGuias
         // 
@@ -806,8 +818,9 @@ partial class Form1
         this.grpGuias.Controls.Add(this.btnGerarGuias);
         this.grpGuias.Controls.Add(this.btnSalvarGuias);
         this.grpGuias.Controls.Add(this.lblTotalGuias);
-        this.grpGuias.Controls.Add(this.dgvGuias);
-        this.grpGuias.Controls.Add(this.txtResultadoGuias);
+        this.grpGuias.Controls.Add(this.splitGuias);
+        this.splitGuias.Panel1.Controls.Add(this.dgvGuias);
+        this.splitGuias.Panel2.Controls.Add(this.txtResultadoGuias);
         this.grpGuias.Dock = System.Windows.Forms.DockStyle.Fill;
         this.grpGuias.Location = new System.Drawing.Point(3, 3);
         this.grpGuias.Name = "grpGuias";
@@ -902,26 +915,31 @@ partial class Form1
         // 
         // dgvGuias
         // 
-        this.dgvGuias.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.dgvGuias.Dock = DockStyle.Fill;
         this.dgvGuias.AllowUserToAddRows = false;
         this.dgvGuias.AllowUserToDeleteRows = false;
-        this.dgvGuias.Location = new System.Drawing.Point(16, 88);
         this.dgvGuias.Name = "dgvGuias";
         this.dgvGuias.RowHeadersVisible = false;
-        this.dgvGuias.Size = new System.Drawing.Size(928, 76);
         this.dgvGuias.TabIndex = 4;
         // 
         // txtResultadoGuias
         // 
-        this.txtResultadoGuias.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
-        this.txtResultadoGuias.Location = new System.Drawing.Point(16, 170);
+        this.txtResultadoGuias.Dock = DockStyle.Fill;
         this.txtResultadoGuias.Multiline = true;
         this.txtResultadoGuias.Name = "txtResultadoGuias";
         this.txtResultadoGuias.ReadOnly = true;
         this.txtResultadoGuias.ScrollBars = ScrollBars.Both;
-        this.txtResultadoGuias.Size = new System.Drawing.Size(928, 68);
         this.txtResultadoGuias.TabIndex = 5;
         this.txtResultadoGuias.Font = new System.Drawing.Font("Consolas", 9F);
+        // 
+        // splitGuias
+        // 
+        this.splitGuias.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.splitGuias.Location = new System.Drawing.Point(16, 88);
+        this.splitGuias.Name = "splitGuias";
+        this.splitGuias.Size = new System.Drawing.Size(928, 206);
+        this.splitGuias.SplitterDistance = 120;
+        this.splitGuias.TabIndex = 8;
         // 
         // grpGrf
         // 
@@ -942,8 +960,9 @@ partial class Form1
         this.grpGrf.Controls.Add(this.btnGerarGrf);
         this.grpGrf.Controls.Add(this.btnSalvarGrf);
         this.grpGrf.Controls.Add(this.lblTotalGrf);
-        this.grpGrf.Controls.Add(this.dgvGrf);
-        this.grpGrf.Controls.Add(this.txtResultadoGrf);
+        this.grpGrf.Controls.Add(this.splitGrf);
+        this.splitGrf.Panel1.Controls.Add(this.dgvGrf);
+        this.splitGrf.Panel2.Controls.Add(this.txtResultadoGrf);
         this.grpGrf.Dock = System.Windows.Forms.DockStyle.Fill;
         this.grpGrf.Location = new System.Drawing.Point(3, 3);
         this.grpGrf.Name = "grpGrf";
@@ -1103,26 +1122,31 @@ partial class Form1
         // 
         // dgvGrf
         // 
-        this.dgvGrf.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.dgvGrf.Dock = DockStyle.Fill;
         this.dgvGrf.AllowUserToAddRows = false;
         this.dgvGrf.AllowUserToDeleteRows = false;
-        this.dgvGrf.Location = new System.Drawing.Point(16, 88);
         this.dgvGrf.Name = "dgvGrf";
         this.dgvGrf.RowHeadersVisible = false;
-        this.dgvGrf.Size = new System.Drawing.Size(928, 120);
         this.dgvGrf.TabIndex = 12;
         // 
         // txtResultadoGrf
         // 
-        this.txtResultadoGrf.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
-        this.txtResultadoGrf.Location = new System.Drawing.Point(16, 214);
+        this.txtResultadoGrf.Dock = DockStyle.Fill;
         this.txtResultadoGrf.Multiline = true;
         this.txtResultadoGrf.Name = "txtResultadoGrf";
         this.txtResultadoGrf.ReadOnly = true;
         this.txtResultadoGrf.ScrollBars = ScrollBars.Both;
-        this.txtResultadoGrf.Size = new System.Drawing.Size(928, 56);
         this.txtResultadoGrf.TabIndex = 13;
         this.txtResultadoGrf.Font = new System.Drawing.Font("Consolas", 9F);
+        // 
+        // splitGrf
+        // 
+        this.splitGrf.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.splitGrf.Location = new System.Drawing.Point(16, 88);
+        this.splitGrf.Name = "splitGrf";
+        this.splitGrf.Size = new System.Drawing.Size(928, 206);
+        this.splitGrf.SplitterDistance = 120;
+        this.splitGrf.TabIndex = 18;
         // 
         // tabExport
         // 
