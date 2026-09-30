@@ -550,6 +550,7 @@ public partial class Form1 : Form
     private void cmbGrfCentro_SelectedIndexChanged(object sender, EventArgs e)
     {
         AtualizarTipCentro(cmbGrfCentro);
+        if (_linhasGrf.Count > 0) AtualizarGradeGrf();
     }
 
     /// <summary>
@@ -1006,36 +1007,9 @@ public partial class Form1 : Form
             _linhasGrf = FiltrarPorCentro(
                 new DbService().ListarGrf(_conn, ini, fim),
                 x => x.ICcustos, centros);
-            var dt = new DataTable();
-            dt.Columns.Add("Sel", typeof(bool));
-            dt.Columns.Add("Emp", typeof(int));
-            dt.Columns.Add("Nome", typeof(string));
-            dt.Columns.Add("Centro", typeof(int));
-            dt.Columns.Add("Vencimento", typeof(string));
-            dt.Columns.Add("Valor", typeof(decimal));
-            foreach (var l in _linhasGrf)
-                dt.Rows.Add(true, l.IEmpregados, l.Nome, l.ICcustos,
-                    l.Vencimento.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture), l.Valor);
-
-            dgvGrf.DataSource = dt;
-            dgvGrf.Columns["Sel"].Width = 40;
-            dgvGrf.Columns["Emp"].Width = 70;
-            dgvGrf.Columns["Nome"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            dgvGrf.Columns["Centro"].Width = 70;
-            dgvGrf.Columns["Vencimento"].Width = 90;
-            dgvGrf.Columns["Valor"].DefaultCellStyle.Format = "N2";
-            dgvGrf.Columns["Sel"].ReadOnly = false;
-            dgvGrf.Columns["Emp"].ReadOnly = true;
-            dgvGrf.Columns["Nome"].ReadOnly = true;
-            dgvGrf.Columns["Centro"].ReadOnly = true;
-            dgvGrf.Columns["Vencimento"].ReadOnly = true;
-            dgvGrf.Columns["Valor"].ReadOnly = true;
-
-        decimal total = _linhasGrf.Sum(x => x.Valor);
-        lblTotalGrf.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
-        btnGerarGrf.Enabled = _linhasGrf.Count > 0;
-        txtResultadoGrf.Clear();
-        PreencherCentrosGrf();
+            AtualizarGradeGrf();
+            txtResultadoGrf.Clear();
+            PreencherCentrosGrf();
         }
         catch (Exception ex)
         {
@@ -1046,6 +1020,64 @@ public partial class Form1 : Form
         {
             Cursor = Cursors.Default;
         }
+    }
+
+    /// <summary>
+    /// Remonta a grade do lote GRRF a partir de _linhasGrf, filtrando pelo centro
+    /// do seletor da aba (0 = todos). Guarda o índice original na coluna oculta Idx
+    /// e preserva as marcações. Total e Gerar seguem a grade visível.
+    /// </summary>
+    private void AtualizarGradeGrf()
+    {
+        int filtro = cmbGrfCentro.SelectedItem is ComboCentro ccF && ccF.Codigo > 0 ? ccF.Codigo : 0;
+        // Marcações anteriores (para preservar ao trocar o filtro); grade nova = tudo marcado.
+        var marcados = new HashSet<int>();
+        bool tinhaGrade = false;
+        try
+        {
+            if (dgvGrf.DataSource is DataTable atual && atual.Columns.Contains("Idx"))
+            {
+                tinhaGrade = true;
+                foreach (DataRow r in atual.Rows)
+                    if (r["Sel"] is bool b && b && r["Idx"] is not DBNull)
+                        marcados.Add(Convert.ToInt32(r["Idx"]));
+            }
+        }
+        catch { }
+        var dt = new DataTable();
+        dt.Columns.Add("Sel", typeof(bool));
+        dt.Columns.Add("Idx", typeof(int));
+        dt.Columns.Add("Emp", typeof(int));
+        dt.Columns.Add("Nome", typeof(string));
+        dt.Columns.Add("Centro", typeof(int));
+        dt.Columns.Add("Vencimento", typeof(string));
+        dt.Columns.Add("Valor", typeof(decimal));
+        decimal total = 0m;
+        for (int k = 0; k < _linhasGrf.Count; k++)
+        {
+            var l = _linhasGrf[k];
+            if (filtro > 0 && l.ICcustos != filtro) continue;
+            dt.Rows.Add(!tinhaGrade || marcados.Contains(k),
+                k, l.IEmpregados, l.Nome, l.ICcustos,
+                l.Vencimento.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture), l.Valor);
+            total += l.Valor;
+        }
+        dgvGrf.DataSource = dt;
+        dgvGrf.Columns["Sel"].Width = 40;
+        dgvGrf.Columns["Idx"].Visible = false;
+        dgvGrf.Columns["Emp"].Width = 70;
+        dgvGrf.Columns["Nome"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        dgvGrf.Columns["Centro"].Width = 70;
+        dgvGrf.Columns["Vencimento"].Width = 90;
+        dgvGrf.Columns["Valor"].DefaultCellStyle.Format = "N2";
+        dgvGrf.Columns["Sel"].ReadOnly = false;
+        dgvGrf.Columns["Emp"].ReadOnly = true;
+        dgvGrf.Columns["Nome"].ReadOnly = true;
+        dgvGrf.Columns["Centro"].ReadOnly = true;
+        dgvGrf.Columns["Vencimento"].ReadOnly = true;
+        dgvGrf.Columns["Valor"].ReadOnly = true;
+        lblTotalGrf.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
+        btnGerarGrf.Enabled = dt.Rows.Count > 0;
     }
 
     /// <summary>Preenche o combo de centro da aba GRRF com os centros do lote carregado.</summary>
@@ -1082,12 +1114,16 @@ public partial class Form1 : Form
         var centrosFiltro = CentrosSelecionadosNaSecao2();
         if (cmbGrfCentro.SelectedItem is ComboCentro ccGrf && ccGrf.Codigo > 0)
             centrosFiltro = new HashSet<int> { ccGrf.Codigo };
-        var selecionadas = _linhasGrf
-            .Select((l, i) => new { l, i })
-            .Where(x => dgvGrf.Rows[x.i].Cells["Sel"].Value is bool b && b)
-            .Where(x => centrosFiltro.Count == 0 || centrosFiltro.Contains(x.l.ICcustos))
-            .Select(x => x.l)
-            .ToList();
+        var selecionadas = new List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)>();
+        foreach (DataGridViewRow row in dgvGrf.Rows)
+        {
+            if (row.Cells["Sel"].Value is bool b && b && row.Cells["Idx"].Value is not DBNull)
+            {
+                var l = _linhasGrf[Convert.ToInt32(row.Cells["Idx"].Value)];
+                if (centrosFiltro.Count == 0 || centrosFiltro.Contains(l.ICcustos))
+                    selecionadas.Add(l);
+            }
+        }
         if (selecionadas.Count == 0)
         {
             MessageBox.Show("Marque pelo menos uma linha de GRRF.", "Aviso",
