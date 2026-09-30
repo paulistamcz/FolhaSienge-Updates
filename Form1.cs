@@ -718,16 +718,15 @@ public partial class Form1 : Form
     /// <summary>
     /// Exibe a grade de apropriação (seleção + G/H/I/J por linha), grava a
     /// personalização por centro (última edição vence) e os lembrados.
+    /// Com valorEditavel (lote GRRF), o Valor também edita e vale no CSV.
     /// Retorna as linhas marcadas ou null (cancelar/vazio).
     /// </summary>
-    private List<LinhaApropriacao>? ExibirGradeApropriacao(List<LinhaApropriacao> grade, string titulo)
+    private List<LinhaApropriacao>? ExibirGradeApropriacao(List<LinhaApropriacao> grade, string titulo, bool valorEditavel = false)
     {
-        // Baseline do diff: o pré-preenchido SEM a camada salva (Base*), para que
-        // reabrir sem mexer mantenha o salvo em vez de apagá-lo.
         var pre = new Dictionary<int, (string G, string H, string I, string J)>();
         foreach (var l in grade)
             if (!pre.ContainsKey(l.Centro)) pre[l.Centro] = (l.BaseG, l.BaseH, l.BaseI, l.BaseJ);
-        using var dlg = new PromptApropriacaoLinhas(grade, titulo);
+        using var dlg = new PromptApropriacaoLinhas(grade, titulo, valorEditavel);
         if (dlg.ShowDialog(this) != DialogResult.OK) return null;
         DbService.SalvarEdicaoApropriacao(DbService.Empresa, pre,
             grade.Select(l => (l.Centro, l.G, l.H, l.I, l.J)));
@@ -1199,14 +1198,14 @@ public partial class Form1 : Form
             if (!PedirMapaCentros(centrosGrf.Select(x => x.Centro))) return;
             var gradeGrfC = MontarGradeApropriacao(centrosGrf.Select((x, i) =>
                 (Indice: i, Desc: $"{x.Centro:D4} - {x.Nome}", Centro: x.Centro, Valor: x.Total)));
-            var selGrfC = ExibirGradeApropriacao(gradeGrfC, "Apropriação - GRRF (completo)");
+            var selGrfC = ExibirGradeApropriacao(gradeGrfC, "Apropriação - GRRF (completo)", true);
             if (selGrfC == null) return;
             var linhasGrfC = new List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)>();
             var apGrfC = new List<(string B, string G, string H, string I, string J)>();
             foreach (var r in selGrfC)
             {
                 var cg = centrosGrf[r.Indice];
-                linhasGrfC.Add((0, "CENTRO DE CUSTO: " + cg.Nome, cg.Centro, lote, cg.Total));
+                linhasGrfC.Add((0, "CENTRO DE CUSTO: " + cg.Nome, cg.Centro, lote, r.Valor));
                 apGrfC.Add((r.B.ToString("D4"), r.G, r.H, r.I, r.J));
             }
             if (linhasGrfC.Count == 0) return;
@@ -1220,7 +1219,7 @@ public partial class Form1 : Form
         if (!PedirMapaCentros(selecionadas.Select(x => x.ICcustos))) return;
         var gradeGrf = MontarGradeApropriacao(selecionadas.Select((x, i) =>
             (Indice: i, Desc: $"{x.IEmpregados} - {x.Nome}", Centro: x.ICcustos, Valor: x.Valor)));
-        var selGrf = ExibirGradeApropriacao(gradeGrf, "Apropriação - GRRF");
+        var selGrf = ExibirGradeApropriacao(gradeGrf, "Apropriação - GRRF", true);
         if (selGrf == null) return;
         var apGrf = selGrf.ToDictionary(r => r.Indice);
         var linhasGrfOut = new List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)>();
@@ -1228,7 +1227,8 @@ public partial class Form1 : Form
         for (int idx = 0; idx < selecionadas.Count; idx++)
         {
             if (!apGrf.TryGetValue(idx, out var r)) continue;
-            linhasGrfOut.Add(selecionadas[idx]);
+            var s0 = selecionadas[idx];
+            linhasGrfOut.Add((s0.IEmpregados, s0.Nome, s0.ICcustos, s0.Vencimento, r.Valor));
             apGrfOut.Add((r.B.ToString("D4"), r.G, r.H, r.I, r.J));
         }
         if (linhasGrfOut.Count == 0) return;

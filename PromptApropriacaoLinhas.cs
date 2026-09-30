@@ -26,7 +26,8 @@ public class LinhaApropriacao
 /// <summary>
 /// Grade de apropriação por linha: mostra cada linha (funcionário/centro) com B
 /// já mapeado e G/H/I/J pré-preenchidos e editáveis; permite marcar todas ou
-/// só algumas. Edita a lista recebida e retorna OK/Cancel.
+/// só algumas. O Valor só é editável quando valorEditavel (lote GRRF).
+/// Edita a lista recebida e retorna OK/Cancel.
 /// </summary>
 public class PromptApropriacaoLinhas : Form
 {
@@ -38,7 +39,7 @@ public class PromptApropriacaoLinhas : Form
     private readonly DataTable _dt = new();
     private readonly List<LinhaApropriacao> _linhas;
 
-    public PromptApropriacaoLinhas(List<LinhaApropriacao> linhas, string titulo)
+    public PromptApropriacaoLinhas(List<LinhaApropriacao> linhas, string titulo, bool valorEditavel = false)
     {
         _linhas = linhas;
         Text = titulo;
@@ -53,9 +54,11 @@ public class PromptApropriacaoLinhas : Form
         _dt.Columns.Add("H", typeof(string));
         _dt.Columns.Add("I", typeof(string));
         _dt.Columns.Add("J", typeof(string));
-        _dt.Columns.Add("Valor", typeof(decimal));
+        // Valor como texto para aceitar digitação livre (vírgula/ponto); validado no OK.
+        _dt.Columns.Add("Valor", typeof(string));
         foreach (var l in linhas)
-            _dt.Rows.Add(l.Sel, l.Descricao, l.B, l.G, l.H, l.I, l.J, l.Valor);
+            _dt.Rows.Add(l.Sel, l.Descricao, l.B, l.G, l.H, l.I, l.J,
+                l.Valor.ToString("N2", CultureInfo.GetCultureInfo("pt-BR")));
 
         var topo = new Panel { Dock = DockStyle.Top, Height = 36 };
         _chkTodos.Text = "Selecionar todos";
@@ -108,11 +111,17 @@ public class PromptApropriacaoLinhas : Form
             DataPropertyName = "Valor",
             HeaderText = "Valor",
             Width = 110,
-            ReadOnly = true,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
+            ReadOnly = !valorEditavel,
+            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight }
         };
         _dgv.Columns.AddRange(colSel, colDesc, colB, colG, colH, colI, colJ, colValor);
         _dgv.DataSource = _dt;
+        _dgv.DataError += (s, e) =>
+        {
+            MessageBox.Show(this, "Valor inválido. Use números (ex.: 1234,56).",
+                "Apropriação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            e.ThrowException = false;
+        };
         _dgv.CurrentCellDirtyStateChanged += (s, e) =>
         {
             if (_dgv.IsCurrentCellDirty)
@@ -120,7 +129,7 @@ public class PromptApropriacaoLinhas : Form
         };
         _dgv.CellValueChanged += (s, e) =>
         {
-            if (e.ColumnIndex == 0) AtualizarTotal();
+            if (e.ColumnIndex == 0 || (e.ColumnIndex >= 0 && _dgv.Columns[e.ColumnIndex].DataPropertyName == "Valor")) AtualizarTotal();
         };
         _dgv.Resize += (s, e) => ReposicionarLabelTotal(topo);
 
@@ -170,12 +179,22 @@ public class PromptApropriacaoLinhas : Form
         AtualizarTotal();
     }
 
+    /// <summary>Interpreta número digitado: com vírgula, pt-BR; sem vírgula, invariante.</summary>
+    public static bool TentarValor(string? texto, out decimal valor)
+    {
+        valor = 0m;
+        var t = (texto ?? "").Trim();
+        if (t == "") return false;
+        var cult = t.Contains(',') ? CultureInfo.GetCultureInfo("pt-BR") : CultureInfo.InvariantCulture;
+        return decimal.TryParse(t, NumberStyles.Number, cult, out valor);
+    }
+
     private void AtualizarTotal()
     {
         decimal total = 0m;
         foreach (DataRow r in _dt.Rows)
         {
-            if (r["Sel"] is bool b && b && r["Valor"] is decimal v)
+            if (r["Sel"] is bool b && b && TentarValor(Convert.ToString(r["Valor"]), out var v))
                 total += v;
         }
         _lblTotal.Text = $"Total selecionado: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
@@ -195,6 +214,14 @@ public class PromptApropriacaoLinhas : Form
             l.H = Convert.ToString(r["H"]) ?? "";
             l.I = Convert.ToString(r["I"]) ?? "";
             l.J = Convert.ToString(r["J"]) ?? "";
+            if (!TentarValor(Convert.ToString(r["Valor"]), out var vv) || vv < 0)
+            {
+                MessageBox.Show(this, $"Valor inválido na linha {i + 1}. Use números maiores ou iguais a zero.",
+                    "Apropriação", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                DialogResult = DialogResult.None;
+                return;
+            }
+            l.Valor = Math.Round(vv, 2);
             if (l.Sel) n++;
         }
         if (n == 0)
