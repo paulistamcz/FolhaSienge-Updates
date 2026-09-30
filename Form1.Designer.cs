@@ -59,8 +59,6 @@ partial class Form1
     private MaskedTextBox mtbGrfFim;
     private Label lblGrfLote;
     private MaskedTextBox mtbGrfLote;
-    private Label lblGrfCentro;
-    private TextBox txtGrfCentro;
     private Label lblGrfModo;
     private ComboBox cmbGrfModo;
     private Label lblGrfFiltroCentro;
@@ -160,8 +158,6 @@ partial class Form1
         this.mtbGrfFim = new MaskedTextBox();
         this.lblGrfLote = new Label();
         this.mtbGrfLote = new MaskedTextBox();
-        this.lblGrfCentro = new Label();
-        this.txtGrfCentro = new TextBox();
         this.lblGrfModo = new Label();
         this.cmbGrfModo = new ComboBox();
         this.lblGrfFiltroCentro = new Label();
@@ -950,8 +946,6 @@ partial class Form1
         this.grpGrf.Controls.Add(this.mtbGrfFim);
         this.grpGrf.Controls.Add(this.lblGrfLote);
         this.grpGrf.Controls.Add(this.mtbGrfLote);
-        this.grpGrf.Controls.Add(this.lblGrfCentro);
-        this.grpGrf.Controls.Add(this.txtGrfCentro);
         this.grpGrf.Controls.Add(this.lblGrfModo);
         this.grpGrf.Controls.Add(this.cmbGrfModo);
         this.grpGrf.Controls.Add(this.lblGrfFiltroCentro);
@@ -1025,23 +1019,6 @@ partial class Form1
         this.mtbGrfLote.TabIndex = 5;
         this.mtbGrfLote.Text = "12082025";
         // 
-        // lblGrfCentro
-        // 
-        this.lblGrfCentro.AutoSize = true;
-        this.lblGrfCentro.Location = new System.Drawing.Point(470, 24);
-        this.lblGrfCentro.Name = "lblGrfCentro";
-        this.lblGrfCentro.Size = new System.Drawing.Size(72, 15);
-        this.lblGrfCentro.TabIndex = 6;
-        this.lblGrfCentro.Text = "Centro (B):";
-        // 
-        // txtGrfCentro
-        // 
-        this.txtGrfCentro.Location = new System.Drawing.Point(546, 20);
-        this.txtGrfCentro.Name = "txtGrfCentro";
-        this.txtGrfCentro.Size = new System.Drawing.Size(90, 23);
-        this.txtGrfCentro.TabIndex = 7;
-        this.txtGrfCentro.Text = "305";
-        // 
         // lblGrfModo
         // 
         this.lblGrfModo.AutoSize = true;
@@ -1080,7 +1057,7 @@ partial class Form1
         // btnCarregarGrf
         // 
         this.btnCarregarGrf.Enabled = false;
-        this.btnCarregarGrf.Location = new System.Drawing.Point(652, 18);
+        this.btnCarregarGrf.Location = new System.Drawing.Point(470, 18);
         this.btnCarregarGrf.Name = "btnCarregarGrf";
         this.btnCarregarGrf.Size = new System.Drawing.Size(140, 28);
         this.btnCarregarGrf.TabIndex = 8;

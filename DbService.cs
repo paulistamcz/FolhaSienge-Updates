@@ -2214,8 +2214,8 @@ public class DbService
     /// Gera o CSV do lote GRRF no formato da planilha manual, com doc e obs
     /// estilo folha (base RRRRVVVCCCDDMMAA + sequência; obs compacta).
     /// Layout: 59;centro;37;GRRF;valor;vencimento;G;H;I;J;doc;REF. A GRRF MM/AAAA - NOME
-    /// B e G/H/I/J vêm da grade por linha (lógica da Folha); o centro digitado
-    /// no lote, se preenchido, vale como B de todas as linhas.
+    /// B e G/H/I/J vêm da grade por linha (lógica da Folha). O parâmetro centro
+    /// é reserva legada (chamadas passam vazio).
     /// </summary>
     public static string GerarCsvGrf(
         List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)> linhas,

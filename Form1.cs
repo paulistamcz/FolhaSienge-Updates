@@ -1162,7 +1162,7 @@ public partial class Form1 : Form
             MessageBox.Show("Data do lote inválida.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
-        string centro = txtGrfCentro.Text.Trim();
+        // B sempre mapeado por linha (grade); sem centro fixo no lote.
         dgvGrf.EndEdit();
         // Filtro por centro: usa o seletor da aba GRRF (preferencial) ou a seleção da seção 2.
         var centrosFiltro = CentrosSelecionadosNaSecao2();
@@ -1232,7 +1232,7 @@ public partial class Form1 : Form
             apGrfOut.Add((r.B.ToString("D4"), r.G, r.H, r.I, r.J));
         }
         if (linhasGrfOut.Count == 0) return;
-        _csvGeradoGrf = DbService.GerarCsvGrf(linhasGrfOut, centro, lote, "59", apGrfOut);
+        _csvGeradoGrf = DbService.GerarCsvGrf(linhasGrfOut, "", lote, "59", apGrfOut);
         MostrarPrevia(txtResultadoGrf, _csvGeradoGrf);
         btnSalvarGrf.Enabled = true;
     }
