@@ -430,12 +430,32 @@ public partial class Form1 : Form
         }
     }
 
+    /// <summary>
+    /// Completa as competências do banco com meses futuros (puro, testável):
+    /// permite gerar rescisões/guias de mês à frente mesmo sem folha fechada.
+    /// Retorna "MM/yyyy" distintos, do mais novo ao mais antigo.
+    /// </summary>
+    public static List<string> CompletarCompetencias(List<string> doBanco, DateTime hoje, int mesesFuturos = 6)
+    {
+        var todas = new HashSet<string>(doBanco ?? new List<string>());
+        var baseMes = new DateTime(hoje.Year, hoje.Month, 1);
+        for (int k = 1; k <= mesesFuturos; k++)
+            todas.Add(baseMes.AddMonths(k).ToString("MM/yyyy", CultureInfo.InvariantCulture));
+        return todas
+            .Select(s => DateTime.TryParseExact(s, "MM/yyyy", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var d) ? d : (DateTime?)null)
+            .Where(d => d != null)
+            .OrderByDescending(d => d)
+            .Select(d => d!.Value.ToString("MM/yyyy", CultureInfo.InvariantCulture))
+            .ToList();
+    }
+
     private void CarregarCompetencias()
     {
         try
         {
             cmbCompetencia.Items.Clear();
-            var comps = new DbService().ListarCompetencias(_conn!);
+            var comps = CompletarCompetencias(new DbService().ListarCompetencias(_conn!), DateTime.Now);
             foreach (var c in comps)
                 cmbCompetencia.Items.Add(c);
             if (cmbCompetencia.Items.Count > 0)
