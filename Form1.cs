@@ -23,6 +23,8 @@ public partial class Form1 : Form
         this.Shown += Form1_Shown;
         cmbGuiasCentro.SelectedIndexChanged += cmbGuiasCentro_SelectedIndexChanged;
         cmbGrfCentro.SelectedIndexChanged += cmbGrfCentro_SelectedIndexChanged;
+        dgvGrf.CellValueChanged += dgvGrf_ValorChanged;
+        dgvGrf.DataError += dgvGrf_ErroValor;
         dgvGrf.CurrentCellDirtyStateChanged += dgvGrf_CellDirty;
         CarregarVerbas();
         CarregarTiposFolha();
@@ -35,6 +37,56 @@ public partial class Form1 : Form
     {
         if (dgvGrf.IsCurrentCellDirty)
             dgvGrf.CommitEdit(DataGridViewDataErrorContexts.Commit);
+    }
+
+    /// <summary>Valor não numérico na grade GRRF: avisa e mantém o anterior.</summary>
+    private void dgvGrf_ErroValor(object? sender, DataGridViewDataErrorEventArgs e)
+    {
+        if (dgvGrf.Columns[e.ColumnIndex].Name == "Valor")
+        {
+            MessageBox.Show(this, "Valor inválido. Use números (ex.: 1234,56).",
+                "GRRF", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            e.ThrowException = false;
+            e.Cancel = false;
+        }
+    }
+
+    /// <summary>
+    /// Valor editado na grade GRRF: grava em _linhasGrf (fonte da geração e do
+    /// filtro) e recalcula o total visível.
+    /// </summary>
+    private void dgvGrf_ValorChanged(object? sender, DataGridViewCellEventArgs e)
+    {
+        try
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (dgvGrf.Columns[e.ColumnIndex].Name != "Valor") return;
+            if (dgvGrf.DataSource is not DataTable dt) return;
+            var row = dgvGrf.Rows[e.RowIndex];
+            if (row.Cells["Idx"].Value is DBNull) return;
+            int idx = Convert.ToInt32(row.Cells["Idx"].Value);
+            if (idx < 0 || idx >= _linhasGrf.Count) return;
+            var v = row.Cells["Valor"].Value;
+            decimal novo = v is DBNull || v == null ? 0m : Convert.ToDecimal(v);
+            if (novo < 0)
+            {
+                MessageBox.Show(this, "Valor não pode ser negativo.",
+                    "GRRF", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                row.Cells["Valor"].Value = _linhasGrf[idx].Valor;
+                return;
+            }
+            var l = _linhasGrf[idx];
+            _linhasGrf[idx] = (l.IEmpregados, l.Nome, l.ICcustos, l.Vencimento, Math.Round(novo, 2));
+            row.Cells["Valor"].Value = _linhasGrf[idx].Valor;
+            decimal total = 0m;
+            foreach (DataGridViewRow r in dgvGrf.Rows)
+            {
+                if (r.Cells["Valor"].Value is DBNull) continue;
+                try { total += Convert.ToDecimal(r.Cells["Valor"].Value); } catch { }
+            }
+            lblTotalGrf.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
+        }
+        catch { }
     }
 
     private void btnSair_Click(object sender, EventArgs e)
@@ -1075,7 +1127,9 @@ public partial class Form1 : Form
         dgvGrf.Columns["Nome"].ReadOnly = true;
         dgvGrf.Columns["Centro"].ReadOnly = true;
         dgvGrf.Columns["Vencimento"].ReadOnly = true;
-        dgvGrf.Columns["Valor"].ReadOnly = true;
+        // Valor editável: Domínio traz a base, mas a Receita pode acrescentar
+        // multa ou dar desconto; vale o editado na geração e no total.
+        dgvGrf.Columns["Valor"].ReadOnly = false;
         lblTotalGrf.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
         btnGerarGrf.Enabled = dt.Rows.Count > 0;
     }
@@ -1110,6 +1164,7 @@ public partial class Form1 : Form
             return;
         }
         string centro = txtGrfCentro.Text.Trim();
+        dgvGrf.EndEdit();
         // Filtro por centro: usa o seletor da aba GRRF (preferencial) ou a seleção da seção 2.
         var centrosFiltro = CentrosSelecionadosNaSecao2();
         if (cmbGrfCentro.SelectedItem is ComboCentro ccGrf && ccGrf.Codigo > 0)
