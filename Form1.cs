@@ -32,10 +32,10 @@ public partial class Form1 : Form
         Text = $"Plus Informática - Folha de Pagamento (Plus Contabilidade)  v{Atualizador.VersaoAtual}";
     }
 
-    /// <summary>Confirma o clique no checkbox da grade GRRF na hora.</summary>
+    /// <summary>Confirma o clique no checkbox da grade GRRF na hora (só checkbox; texto confirma ao sair).</summary>
     private void dgvGrf_CellDirty(object? sender, EventArgs e)
     {
-        if (dgvGrf.IsCurrentCellDirty)
+        if (dgvGrf.IsCurrentCellDirty && dgvGrf.CurrentCell is DataGridViewCheckBoxCell)
             dgvGrf.CommitEdit(DataGridViewDataErrorContexts.Commit);
     }
 
