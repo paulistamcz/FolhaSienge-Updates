@@ -61,6 +61,10 @@ partial class Form1
     private MaskedTextBox mtbGrfLote;
     private Label lblGrfCentro;
     private TextBox txtGrfCentro;
+    private Label lblGrfModo;
+    private ComboBox cmbGrfModo;
+    private Label lblGrfFiltroCentro;
+    private ComboBox cmbGrfCentro;
     private Button btnCarregarGrf;
     private Button btnGerarGrf;
     private Button btnSalvarGrf;
@@ -92,6 +96,8 @@ partial class Form1
     private ComboBox cmbGuiasTipo;
     private Label lblGuiasModo;
     private ComboBox cmbGuiasModo;
+    private Label lblGuiasCentro;
+    private ComboBox cmbGuiasCentro;
     private Button btnGerarGuias;
     private Button btnSalvarGuias;
     private Label lblTotalGuias;
@@ -99,6 +105,7 @@ partial class Form1
     private TextBox txtResultadoGuias;
 
     private TabControl tabExport;
+    private TabPage tabConsolidar;
     private TabPage tabGrf;
     private TabPage tabFolha;
     private TabPage tabGuias;
@@ -152,6 +159,10 @@ partial class Form1
         this.mtbGrfLote = new MaskedTextBox();
         this.lblGrfCentro = new Label();
         this.txtGrfCentro = new TextBox();
+        this.lblGrfModo = new Label();
+        this.cmbGrfModo = new ComboBox();
+        this.lblGrfFiltroCentro = new Label();
+        this.cmbGrfCentro = new ComboBox();
         this.btnCarregarGrf = new Button();
         this.btnGerarGrf = new Button();
         this.btnSalvarGrf = new Button();
@@ -181,12 +192,15 @@ partial class Form1
         this.cmbGuiasTipo = new ComboBox();
         this.lblGuiasModo = new Label();
         this.cmbGuiasModo = new ComboBox();
+        this.lblGuiasCentro = new Label();
+        this.cmbGuiasCentro = new ComboBox();
         this.btnGerarGuias = new Button();
         this.btnSalvarGuias = new Button();
         this.lblTotalGuias = new Label();
         this.dgvGuias = new DataGridView();
         this.txtResultadoGuias = new TextBox();
         this.tabExport = new TabControl();
+        this.tabConsolidar = new TabPage();
         this.tabGrf = new TabPage();
         this.tabFolha = new TabPage();
         this.tabGuias = new TabPage();
@@ -211,7 +225,7 @@ partial class Form1
         this.grpBanco.Anchor = ((AnchorStyles)(((AnchorStyles.Top | AnchorStyles.Left) | AnchorStyles.Right)));
         this.grpBanco.Location = new System.Drawing.Point(12, 12);
         this.grpBanco.Name = "grpBanco";
-        this.grpBanco.Size = new System.Drawing.Size(960, 108);
+        this.grpBanco.Size = new System.Drawing.Size(928, 108);
         this.grpBanco.TabIndex = 0;
         this.grpBanco.TabStop = false;
         this.grpBanco.Text = "1. Banco de dados (busca automática no servidor)";
@@ -315,7 +329,7 @@ partial class Form1
         this.grpDados.Anchor = ((AnchorStyles)(((AnchorStyles.Top | AnchorStyles.Left) | AnchorStyles.Right)));
         this.grpDados.Location = new System.Drawing.Point(12, 126);
         this.grpDados.Name = "grpDados";
-        this.grpDados.Size = new System.Drawing.Size(960, 300);
+        this.grpDados.Size = new System.Drawing.Size(928, 264);
         this.grpDados.TabIndex = 1;
         this.grpDados.TabStop = false;
         this.grpDados.Text = "2. Competência e centros de custo";
@@ -401,7 +415,7 @@ partial class Form1
         this.dgvCentros.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
         this.dgvCentros.Location = new System.Drawing.Point(16, 84);
         this.dgvCentros.Name = "dgvCentros";
-        this.dgvCentros.Size = new System.Drawing.Size(928, 206);
+        this.dgvCentros.Size = new System.Drawing.Size(928, 170);
         this.dgvCentros.TabIndex = 4;
         this.dgvCentros.ReadOnly = false;
         this.dgvCentros.RowHeadersVisible = false;
@@ -428,9 +442,9 @@ partial class Form1
         this.grpCsv.Controls.Add(this.lblTotal);
         this.grpCsv.Controls.Add(this.txtResultado);
         this.grpCsv.Anchor = ((AnchorStyles)(((AnchorStyles.Top | AnchorStyles.Left) | AnchorStyles.Right)));
-        this.grpCsv.Location = new System.Drawing.Point(12, 432);
+        this.grpCsv.Location = new System.Drawing.Point(12, 396);
         this.grpCsv.Name = "grpCsv";
-        this.grpCsv.Size = new System.Drawing.Size(960, 270);
+        this.grpCsv.Size = new System.Drawing.Size(928, 248);
         this.grpCsv.TabIndex = 2;
         this.grpCsv.TabStop = false;
         this.grpCsv.Text = "3. Geração do arquivo CSV (layout Folha de Pagamento)";
@@ -581,7 +595,7 @@ partial class Form1
         this.txtResultado.Name = "txtResultado";
         this.txtResultado.ReadOnly = true;
         this.txtResultado.ScrollBars = ScrollBars.Both;
-        this.txtResultado.Size = new System.Drawing.Size(928, 106);
+        this.txtResultado.Size = new System.Drawing.Size(928, 84);
         this.txtResultado.TabIndex = 9;
         this.txtResultado.Font = new System.Drawing.Font("Consolas", 9F);
         // 
@@ -787,6 +801,8 @@ partial class Form1
         this.grpGuias.Controls.Add(this.cmbGuiasTipo);
         this.grpGuias.Controls.Add(this.lblGuiasModo);
         this.grpGuias.Controls.Add(this.cmbGuiasModo);
+        this.grpGuias.Controls.Add(this.lblGuiasCentro);
+        this.grpGuias.Controls.Add(this.cmbGuiasCentro);
         this.grpGuias.Controls.Add(this.btnGerarGuias);
         this.grpGuias.Controls.Add(this.btnSalvarGuias);
         this.grpGuias.Controls.Add(this.lblTotalGuias);
@@ -834,6 +850,24 @@ partial class Form1
         this.cmbGuiasModo.Size = new System.Drawing.Size(180, 23);
         this.cmbGuiasModo.TabIndex = 3;
         // 
+        // lblGuiasCentro
+        // 
+        this.lblGuiasCentro.AutoSize = true;
+        this.lblGuiasCentro.Location = new System.Drawing.Point(16, 60);
+        this.lblGuiasCentro.Name = "lblGuiasCentro";
+        this.lblGuiasCentro.Size = new System.Drawing.Size(47, 15);
+        this.lblGuiasCentro.TabIndex = 6;
+        this.lblGuiasCentro.Text = "Centro:";
+        // 
+        // cmbGuiasCentro
+        // 
+        this.cmbGuiasCentro.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbGuiasCentro.DropDownWidth = 420;
+        this.cmbGuiasCentro.Location = new System.Drawing.Point(70, 56);
+        this.cmbGuiasCentro.Name = "cmbGuiasCentro";
+        this.cmbGuiasCentro.Size = new System.Drawing.Size(240, 23);
+        this.cmbGuiasCentro.TabIndex = 7;
+        // 
         // btnGerarGuias
         // 
         this.btnGerarGuias.Enabled = false;
@@ -859,7 +893,7 @@ partial class Form1
         // lblTotalGuias
         // 
         this.lblTotalGuias.Anchor = ((AnchorStyles)((AnchorStyles.Top | AnchorStyles.Right)));
-        this.lblTotalGuias.Location = new System.Drawing.Point(640, 24);
+        this.lblTotalGuias.Location = new System.Drawing.Point(640, 60);
         this.lblTotalGuias.Name = "lblTotalGuias";
         this.lblTotalGuias.Size = new System.Drawing.Size(304, 20);
         this.lblTotalGuias.TabIndex = 3;
@@ -871,21 +905,21 @@ partial class Form1
         this.dgvGuias.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
         this.dgvGuias.AllowUserToAddRows = false;
         this.dgvGuias.AllowUserToDeleteRows = false;
-        this.dgvGuias.Location = new System.Drawing.Point(16, 56);
+        this.dgvGuias.Location = new System.Drawing.Point(16, 88);
         this.dgvGuias.Name = "dgvGuias";
         this.dgvGuias.RowHeadersVisible = false;
-        this.dgvGuias.Size = new System.Drawing.Size(928, 96);
+        this.dgvGuias.Size = new System.Drawing.Size(928, 76);
         this.dgvGuias.TabIndex = 4;
         // 
         // txtResultadoGuias
         // 
         this.txtResultadoGuias.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
-        this.txtResultadoGuias.Location = new System.Drawing.Point(16, 158);
+        this.txtResultadoGuias.Location = new System.Drawing.Point(16, 170);
         this.txtResultadoGuias.Multiline = true;
         this.txtResultadoGuias.Name = "txtResultadoGuias";
         this.txtResultadoGuias.ReadOnly = true;
         this.txtResultadoGuias.ScrollBars = ScrollBars.Both;
-        this.txtResultadoGuias.Size = new System.Drawing.Size(928, 80);
+        this.txtResultadoGuias.Size = new System.Drawing.Size(928, 68);
         this.txtResultadoGuias.TabIndex = 5;
         this.txtResultadoGuias.Font = new System.Drawing.Font("Consolas", 9F);
         // 
@@ -900,6 +934,10 @@ partial class Form1
         this.grpGrf.Controls.Add(this.mtbGrfLote);
         this.grpGrf.Controls.Add(this.lblGrfCentro);
         this.grpGrf.Controls.Add(this.txtGrfCentro);
+        this.grpGrf.Controls.Add(this.lblGrfModo);
+        this.grpGrf.Controls.Add(this.cmbGrfModo);
+        this.grpGrf.Controls.Add(this.lblGrfFiltroCentro);
+        this.grpGrf.Controls.Add(this.cmbGrfCentro);
         this.grpGrf.Controls.Add(this.btnCarregarGrf);
         this.grpGrf.Controls.Add(this.btnGerarGrf);
         this.grpGrf.Controls.Add(this.btnSalvarGrf);
@@ -985,6 +1023,41 @@ partial class Form1
         this.txtGrfCentro.TabIndex = 7;
         this.txtGrfCentro.Text = "305";
         // 
+        // lblGrfModo
+        // 
+        this.lblGrfModo.AutoSize = true;
+        this.lblGrfModo.Location = new System.Drawing.Point(316, 56);
+        this.lblGrfModo.Name = "lblGrfModo";
+        this.lblGrfModo.Size = new System.Drawing.Size(43, 15);
+        this.lblGrfModo.TabIndex = 14;
+        this.lblGrfModo.Text = "Modo:";
+        // 
+        // cmbGrfModo
+        // 
+        this.cmbGrfModo.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbGrfModo.Location = new System.Drawing.Point(362, 52);
+        this.cmbGrfModo.Name = "cmbGrfModo";
+        this.cmbGrfModo.Size = new System.Drawing.Size(150, 23);
+        this.cmbGrfModo.TabIndex = 15;
+        // 
+        // lblGrfFiltroCentro
+        // 
+        this.lblGrfFiltroCentro.AutoSize = true;
+        this.lblGrfFiltroCentro.Location = new System.Drawing.Point(524, 56);
+        this.lblGrfFiltroCentro.Name = "lblGrfFiltroCentro";
+        this.lblGrfFiltroCentro.Size = new System.Drawing.Size(47, 15);
+        this.lblGrfFiltroCentro.TabIndex = 16;
+        this.lblGrfFiltroCentro.Text = "Centro:";
+        // 
+        // cmbGrfCentro
+        // 
+        this.cmbGrfCentro.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbGrfCentro.DropDownWidth = 420;
+        this.cmbGrfCentro.Location = new System.Drawing.Point(576, 52);
+        this.cmbGrfCentro.Name = "cmbGrfCentro";
+        this.cmbGrfCentro.Size = new System.Drawing.Size(150, 23);
+        this.cmbGrfCentro.TabIndex = 17;
+        // 
         // btnCarregarGrf
         // 
         this.btnCarregarGrf.Enabled = false;
@@ -1021,7 +1094,7 @@ partial class Form1
         // lblTotalGrf
         // 
         this.lblTotalGrf.Anchor = ((AnchorStyles)((AnchorStyles.Top | AnchorStyles.Right)));
-        this.lblTotalGrf.Location = new System.Drawing.Point(640, 56);
+        this.lblTotalGrf.Location = new System.Drawing.Point(640, 24);
         this.lblTotalGrf.Name = "lblTotalGrf";
         this.lblTotalGrf.Size = new System.Drawing.Size(304, 20);
         this.lblTotalGrf.TabIndex = 11;
@@ -1054,45 +1127,63 @@ partial class Form1
         // tabExport
         // 
         this.tabExport.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+        this.tabExport.Controls.Add(this.tabConsolidar);
         this.tabExport.Controls.Add(this.tabGrf);
         this.tabExport.Controls.Add(this.tabFolha);
         this.tabExport.Controls.Add(this.tabGuias);
-        this.tabExport.Location = new System.Drawing.Point(12, 710);
+        this.tabExport.Location = new System.Drawing.Point(12, 50);
         this.tabExport.Name = "tabExport";
         this.tabExport.SelectedIndex = 0;
-        this.tabExport.Size = new System.Drawing.Size(960, 330);
+        this.tabExport.Size = new System.Drawing.Size(960, 976);
         this.tabExport.TabIndex = 40;
+        // 
+        // tabConsolidar
+        // 
+        this.tabConsolidar.AutoScroll = true;
+        this.tabConsolidar.Controls.Add(this.grpBanco);
+        this.tabConsolidar.Controls.Add(this.grpDados);
+        this.tabConsolidar.Controls.Add(this.grpCsv);
+        this.tabConsolidar.Location = new System.Drawing.Point(4, 24);
+        this.tabConsolidar.Name = "tabConsolidar";
+        this.tabConsolidar.Padding = new System.Windows.Forms.Padding(3);
+        this.tabConsolidar.Size = new System.Drawing.Size(952, 948);
+        this.tabConsolidar.TabIndex = 0;
+        this.tabConsolidar.Text = "Consolidar";
+        this.tabConsolidar.UseVisualStyleBackColor = true;
         // 
         // tabGrf
         // 
+        this.tabGrf.AutoScroll = true;
         this.tabGrf.Controls.Add(this.grpGrf);
         this.tabGrf.Location = new System.Drawing.Point(4, 24);
         this.tabGrf.Name = "tabGrf";
         this.tabGrf.Padding = new System.Windows.Forms.Padding(3);
         this.tabGrf.Size = new System.Drawing.Size(952, 302);
-        this.tabGrf.TabIndex = 0;
+        this.tabGrf.TabIndex = 1;
         this.tabGrf.Text = "Lote GRRF";
         this.tabGrf.UseVisualStyleBackColor = true;
         // 
         // tabFolha
         // 
+        this.tabFolha.AutoScroll = true;
         this.tabFolha.Controls.Add(this.grpFolha);
         this.tabFolha.Location = new System.Drawing.Point(4, 24);
         this.tabFolha.Name = "tabFolha";
         this.tabFolha.Padding = new System.Windows.Forms.Padding(3);
         this.tabFolha.Size = new System.Drawing.Size(952, 302);
-        this.tabFolha.TabIndex = 1;
+        this.tabFolha.TabIndex = 2;
         this.tabFolha.Text = "Folha / Férias / Rescisões";
         this.tabFolha.UseVisualStyleBackColor = true;
         // 
         // tabGuias
         // 
+        this.tabGuias.AutoScroll = true;
         this.tabGuias.Controls.Add(this.grpGuias);
         this.tabGuias.Location = new System.Drawing.Point(4, 24);
         this.tabGuias.Name = "tabGuias";
         this.tabGuias.Padding = new System.Windows.Forms.Padding(3);
         this.tabGuias.Size = new System.Drawing.Size(952, 302);
-        this.tabGuias.TabIndex = 2;
+        this.tabGuias.TabIndex = 3;
         this.tabGuias.Text = "Guias";
         this.tabGuias.UseVisualStyleBackColor = true;
         // 
@@ -1104,9 +1195,6 @@ partial class Form1
         this.ClientSize = new System.Drawing.Size(984, 1050);
         this.Controls.Add(this.btnSair);
         this.Controls.Add(this.tabExport);
-        this.Controls.Add(this.grpCsv);
-        this.Controls.Add(this.grpDados);
-        this.Controls.Add(this.grpBanco);
         this.Name = "Form1";
         this.StartPosition = FormStartPosition.CenterScreen;
         this.MinimumSize = new System.Drawing.Size(800, 600);

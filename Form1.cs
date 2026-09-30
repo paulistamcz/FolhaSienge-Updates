@@ -21,6 +21,8 @@ public partial class Form1 : Form
         InitializeComponent();
         UiAjuste.CaberNaTela(this);
         this.Shown += Form1_Shown;
+        cmbGuiasCentro.SelectedIndexChanged += cmbGuiasCentro_SelectedIndexChanged;
+        cmbGrfCentro.SelectedIndexChanged += cmbGrfCentro_SelectedIndexChanged;
         dgvGrf.CurrentCellDirtyStateChanged += dgvGrf_CellDirty;
         CarregarVerbas();
         CarregarTiposFolha();
@@ -54,6 +56,11 @@ public partial class Form1 : Form
         cmbGuiasModo.Items.Add("Completo (total por centro)");
         cmbGuiasModo.Items.Add("Analítico (por pessoa)");
         cmbGuiasModo.SelectedIndex = 0;
+
+        cmbGrfModo.Items.Clear();
+        cmbGrfModo.Items.Add("Analítico (por pessoa)");
+        cmbGrfModo.Items.Add("Completo (total por centro)");
+        cmbGrfModo.SelectedIndex = 0;
     }
 
     private void CarregarTiposFolha()
@@ -437,6 +444,7 @@ public partial class Form1 : Form
 
         // Preenche o seletor de centro da aba Folha
         PreencherCentrosFolha();
+        PreencherCentrosGuias();
     }
 
     /// <summary>Preenche o combo de centro de custo da aba Folha com os centros da competência.</summary>
@@ -456,23 +464,46 @@ public partial class Form1 : Form
         }
         catch { }
         cmbFolhaCentro.SelectedIndex = 0;
-        AjustarCentroDropDown();
+        AjustarComboCentro(cmbFolhaCentro);
+    }
+
+    /// <summary>Preenche o combo de centro da aba Guias com os centros da competência (tipo 11).</summary>
+    private void PreencherCentrosGuias()
+    {
+        string comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
+        int sel = cmbGuiasCentro.SelectedItem is ComboCentro ccSel ? ccSel.Codigo : 0;
+        cmbGuiasCentro.Items.Clear();
+        cmbGuiasCentro.Items.Add(new ComboCentro(0, "Todos os centros"));
+        try
+        {
+            if (_conn != null && !string.IsNullOrWhiteSpace(comp))
+            {
+                foreach (var c in new DbService().ListarCentrosCusto(_conn, comp, 11))
+                    cmbGuiasCentro.Items.Add(new ComboCentro(c.Codigo, c.Nome));
+            }
+        }
+        catch { }
+        int idx = 0;
+        for (int k = 0; k < cmbGuiasCentro.Items.Count; k++)
+            if (cmbGuiasCentro.Items[k] is ComboCentro cc && cc.Codigo == sel) idx = k;
+        cmbGuiasCentro.SelectedIndex = idx;
+        AjustarComboCentro(cmbGuiasCentro);
     }
 
     /// <summary>
-    /// Alarga a lista suspensa do combo de centro para caber o nome completo
+    /// Alarga a lista suspensa de um combo de centro para caber o nome completo
     /// (sem mexer na largura do controle) e mostra o nome todo no tooltip.
     /// </summary>
-    private void AjustarCentroDropDown()
+    private void AjustarComboCentro(ComboBox cmb)
     {
         try
         {
-            int w = cmbFolhaCentro.Width;
-            foreach (var it in cmbFolhaCentro.Items)
+            int w = cmb.Width;
+            foreach (var it in cmb.Items)
             {
                 string t = it?.ToString() ?? "";
                 if (t == "") continue;
-                int tw = TextRenderer.MeasureText(t, cmbFolhaCentro.Font).Width
+                int tw = TextRenderer.MeasureText(t, cmb.Font).Width
                     + SystemInformation.VerticalScrollBarWidth + 12;
                 if (tw > w) w = tw;
             }
@@ -480,21 +511,21 @@ public partial class Form1 : Form
             try
             {
                 maxLarg = Math.Min(maxLarg,
-                    System.Windows.Forms.Screen.FromControl(cmbFolhaCentro).WorkingArea.Width - 40);
+                    System.Windows.Forms.Screen.FromControl(cmb).WorkingArea.Width - 40);
             }
             catch { }
-            cmbFolhaCentro.DropDownWidth = Math.Max(cmbFolhaCentro.Width, Math.Min(w, Math.Max(200, maxLarg)));
+            cmb.DropDownWidth = Math.Max(cmb.Width, Math.Min(w, Math.Max(200, maxLarg)));
         }
         catch { }
-        AtualizarTipCentro();
+        AtualizarTipCentro(cmb);
     }
 
-    private void AtualizarTipCentro()
+    private void AtualizarTipCentro(ComboBox cmb)
     {
         try
         {
-            string t = cmbFolhaCentro.SelectedItem?.ToString() ?? "";
-            _tipCentro.SetToolTip(cmbFolhaCentro, t);
+            string t = cmb.SelectedItem?.ToString() ?? "";
+            _tipCentro.SetToolTip(cmb, t);
         }
         catch { }
     }
@@ -508,7 +539,17 @@ public partial class Form1 : Form
     private void cmbFolhaCentro_SelectedIndexChanged(object sender, EventArgs e)
     {
         // Ao mudar o centro na aba Folha, não faz nada automático; só informa o filtro.
-        AtualizarTipCentro();
+        AtualizarTipCentro(cmbFolhaCentro);
+    }
+
+    private void cmbGuiasCentro_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        AtualizarTipCentro(cmbGuiasCentro);
+    }
+
+    private void cmbGrfCentro_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        AtualizarTipCentro(cmbGrfCentro);
     }
 
     /// <summary>
@@ -990,10 +1031,11 @@ public partial class Form1 : Form
             dgvGrf.Columns["Vencimento"].ReadOnly = true;
             dgvGrf.Columns["Valor"].ReadOnly = true;
 
-            decimal total = _linhasGrf.Sum(x => x.Valor);
-            lblTotalGrf.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
-            btnGerarGrf.Enabled = _linhasGrf.Count > 0;
-            txtResultadoGrf.Clear();
+        decimal total = _linhasGrf.Sum(x => x.Valor);
+        lblTotalGrf.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
+        btnGerarGrf.Enabled = _linhasGrf.Count > 0;
+        txtResultadoGrf.Clear();
+        PreencherCentrosGrf();
         }
         catch (Exception ex)
         {
@@ -1006,6 +1048,26 @@ public partial class Form1 : Form
         }
     }
 
+    /// <summary>Preenche o combo de centro da aba GRRF com os centros do lote carregado.</summary>
+    private void PreencherCentrosGrf()
+    {
+        int sel = cmbGrfCentro.SelectedItem is ComboCentro ccSel ? ccSel.Codigo : 0;
+        cmbGrfCentro.Items.Clear();
+        cmbGrfCentro.Items.Add(new ComboCentro(0, "Todos os centros"));
+        try
+        {
+            var svc = new DbService();
+            foreach (var cc in _linhasGrf.Select(x => x.ICcustos).Distinct().OrderBy(c => c))
+                cmbGrfCentro.Items.Add(new ComboCentro(cc, _conn == null ? "" : svc.NomeCentroCusto(_conn, cc)));
+        }
+        catch { }
+        int idx = 0;
+        for (int k = 0; k < cmbGrfCentro.Items.Count; k++)
+            if (cmbGrfCentro.Items[k] is ComboCentro cc && cc.Codigo == sel) idx = k;
+        cmbGrfCentro.SelectedIndex = idx;
+        AjustarComboCentro(cmbGrfCentro);
+    }
+
     private void btnGerarGrf_Click(object sender, EventArgs e)
     {
         if (_linhasGrf.Count == 0) return;
@@ -1016,7 +1078,10 @@ public partial class Form1 : Form
             return;
         }
         string centro = txtGrfCentro.Text.Trim();
+        // Filtro por centro: usa o seletor da aba GRRF (preferencial) ou a seleção da seção 2.
         var centrosFiltro = CentrosSelecionadosNaSecao2();
+        if (cmbGrfCentro.SelectedItem is ComboCentro ccGrf && ccGrf.Codigo > 0)
+            centrosFiltro = new HashSet<int> { ccGrf.Codigo };
         var selecionadas = _linhasGrf
             .Select((l, i) => new { l, i })
             .Where(x => dgvGrf.Rows[x.i].Cells["Sel"].Value is bool b && b)
@@ -1027,6 +1092,36 @@ public partial class Form1 : Form
         {
             MessageBox.Show("Marque pelo menos uma linha de GRRF.", "Aviso",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        // Modo completo: total por centro (vencimento = data do lote).
+        if (cmbGrfModo.SelectedIndex == 1)
+        {
+            var svcG = new DbService();
+            var centrosGrf = selecionadas
+                .GroupBy(x => x.ICcustos)
+                .OrderBy(g => g.Key)
+                .Select(g => (Centro: g.Key,
+                    Nome: _conn == null ? "" : svcG.NomeCentroCusto(_conn, g.Key),
+                    Total: g.Sum(x => x.Valor)))
+                .ToList();
+            if (!PedirMapaCentros(centrosGrf.Select(x => x.Centro))) return;
+            var gradeGrfC = MontarGradeApropriacao(centrosGrf.Select((x, i) =>
+                (Indice: i, Desc: $"{x.Centro:D4} - {x.Nome}", Centro: x.Centro, Valor: x.Total)));
+            var selGrfC = ExibirGradeApropriacao(gradeGrfC, "Apropriação - GRRF (completo)");
+            if (selGrfC == null) return;
+            var linhasGrfC = new List<(int IEmpregados, string Nome, int ICcustos, DateTime Vencimento, decimal Valor)>();
+            var apGrfC = new List<(string B, string G, string H, string I, string J)>();
+            foreach (var r in selGrfC)
+            {
+                var cg = centrosGrf[r.Indice];
+                linhasGrfC.Add((0, "CENTRO DE CUSTO: " + cg.Nome, cg.Centro, lote, cg.Total));
+                apGrfC.Add((r.B.ToString("D4"), r.G, r.H, r.I, r.J));
+            }
+            if (linhasGrfC.Count == 0) return;
+            _csvGeradoGrf = DbService.GerarCsvGrf(linhasGrfC, "", lote, "59", apGrfC);
+            MostrarPrevia(txtResultadoGrf, _csvGeradoGrf);
+            btnSalvarGrf.Enabled = true;
             return;
         }
         // Lógica da Folha: B mapeado + grade G/H/I/J por linha (o centro
@@ -1538,7 +1633,10 @@ public partial class Form1 : Form
         try
         {
             var svc = new DbService();
+            // Filtro por centro: usa o seletor da aba Guias (preferencial) ou a seleção da seção 2.
             var centrosFiltro = CentrosSelecionadosNaSecao2();
+            if (cmbGuiasCentro.SelectedItem is ComboCentro ccG && ccG.Codigo > 0)
+                centrosFiltro = new HashSet<int> { ccG.Codigo };
 
             // Código/nome do credor por tipo (tabela_financeira)
             string descricao = cmbGuiasTipo.SelectedItem?.ToString() ?? "INSS";
@@ -1547,7 +1645,7 @@ public partial class Form1 : Form
             {
                 "INSS" => "2",
                 "FGTS" => "58",
-                "IRRF" => "010",
+                "IRRF" => "10",
                 "GRRF" => "59",
                 "ECONSIGNADO" => "37",
                 _ => descricao, // outros: mantém até confirmar o código
