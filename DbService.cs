@@ -539,9 +539,9 @@ public class DbService
     /// Lista as empresas (codi_emp) que possuem folha registrada (foliquidosfil),
     /// com o nome fantasia/razão vindo de geempre quando existir.
     /// </summary>
-    public List<(int Codigo, string Nome)> ListarEmpresas(OdbcConnection conn)
+    public List<(int Codigo, string Nome, string Razao)> ListarEmpresas(OdbcConnection conn)
     {
-        var lista = new List<(int, string)>();
+        var lista = new List<(int, string, string)>();
         using var cmd = new OdbcCommand(
             "SELECT DISTINCT l.codi_emp, g.razao_emp, g.fantasia_emp " +
             "FROM bethadba.foliquidosfil l " +
@@ -556,7 +556,7 @@ public class DbService
             string razao = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
             string fantasia = rd.IsDBNull(2) ? "" : Convert.ToString(rd[2])!;
             string nome = string.IsNullOrWhiteSpace(fantasia) ? razao : fantasia;
-            lista.Add((cod, nome));
+            lista.Add((cod, nome, razao));
         }
         return lista;
     }

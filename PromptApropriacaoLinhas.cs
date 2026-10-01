@@ -127,9 +127,21 @@ public class PromptApropriacaoLinhas : Form
             if (_dgv.IsCurrentCellDirty)
                 _dgv.CommitEdit(DataGridViewDataErrorContexts.Commit);
         };
+        bool propagando = false;
         _dgv.CellValueChanged += (s, e) =>
         {
-            if (e.ColumnIndex == 0 || (e.ColumnIndex >= 0 && _dgv.Columns[e.ColumnIndex].DataPropertyName == "Valor")) AtualizarTotal();
+            if (propagando) return;
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            string prop = _dgv.Columns[e.ColumnIndex].DataPropertyName ?? "";
+            if (e.ColumnIndex == 0 || prop == "Valor") { AtualizarTotal(); return; }
+            // Editou G/H/I/J: replica para as demais linhas do mesmo centro (analítico).
+            if ((prop == "G" || prop == "H" || prop == "I" || prop == "J") && e.RowIndex < _linhas.Count)
+            {
+                propagando = true;
+                try { Propagar(_dt, _linhas.Select(l => l.Centro).ToList(), e.RowIndex, prop); }
+                finally { propagando = false; }
+                _dgv.Refresh();
+            }
         };
         _dgv.Resize += (s, e) => ReposicionarLabelTotal(topo);
 
@@ -180,6 +192,24 @@ public class PromptApropriacaoLinhas : Form
     }
 
     /// <summary>Interpreta número digitado: com vírgula, pt-BR; sem vírgula, invariante.</summary>
+    /// <summary>
+    /// Propaga o valor editado (G/H/I/J) para todas as linhas do mesmo centro
+    /// (modo analítico tem várias linhas por centro). Puro, testável.
+    /// </summary>
+    public static void Propagar(DataTable dt, IList<int> centrosPorLinha, int linhaEditada, string coluna)
+    {
+        if (dt == null || centrosPorLinha == null) return;
+        if (linhaEditada < 0 || linhaEditada >= dt.Rows.Count || linhaEditada >= centrosPorLinha.Count) return;
+        if (!dt.Columns.Contains(coluna)) return;
+        int centro = centrosPorLinha[linhaEditada];
+        object valor = dt.Rows[linhaEditada][coluna];
+        for (int i = 0; i < dt.Rows.Count && i < centrosPorLinha.Count; i++)
+        {
+            if (i != linhaEditada && centrosPorLinha[i] == centro)
+                dt.Rows[i][coluna] = valor;
+        }
+    }
+
     public static bool TentarValor(string? texto, out decimal valor)
     {
         valor = 0m;

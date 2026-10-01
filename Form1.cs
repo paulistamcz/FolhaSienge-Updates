@@ -369,8 +369,9 @@ public partial class Form1 : Form
             _carregandoEmpresas = true;
             cmbEmpresa.Items.Clear();
             var empresas = new DbService().ListarEmpresas(_conn!);
-            foreach (var (cod, nome) in empresas)
-                cmbEmpresa.Items.Add(new ComboEmpresa(cod, nome));
+            foreach (var (cod, nome, razao) in empresas)
+                cmbEmpresa.Items.Add(new ComboEmpresa(cod, nome, razao));
+            AjustarComboCentro(cmbEmpresa);
             cmbEmpresa.Enabled = cmbEmpresa.Items.Count > 0;
             if (cmbEmpresa.Items.Count > 0)
             {
@@ -405,6 +406,7 @@ public partial class Form1 : Form
         if (_carregandoEmpresas) return;
         if (cmbEmpresa.SelectedItem is ComboEmpresa emp)
         {
+            _tipCentro.SetToolTip(cmbEmpresa, emp.NomeCompleto);
             DbService.Empresa = emp.Codigo;
             dgvCentros.DataSource = null;
             dgvFolha.DataSource = null;
@@ -431,22 +433,26 @@ public partial class Form1 : Form
     }
 
     /// <summary>
-    /// Completa as competências do banco com meses futuros (puro, testável):
-    /// permite gerar rescisões/guias de mês à frente mesmo sem folha fechada.
+    /// Monta as competências como calendário fixo (puro, testável): 36 meses
+    /// para trás + 6 à frente, mais eventuais meses do banco fora da janela.
+    /// Não depende de a empresa ter lançamento no mês.
     /// Retorna "MM/yyyy" distintos, do mais novo ao mais antigo.
     /// </summary>
-    public static List<string> CompletarCompetencias(List<string> doBanco, DateTime hoje, int mesesFuturos = 6)
+    public static List<string> CompletarCompetencias(List<string> doBanco, DateTime hoje, int passados = 36, int mesesFuturos = 6)
     {
-        var todas = new HashSet<string>(doBanco ?? new List<string>());
+        var todas = new HashSet<string>();
         var baseMes = new DateTime(hoje.Year, hoje.Month, 1);
-        for (int k = 1; k <= mesesFuturos; k++)
+        for (int k = -passados; k <= mesesFuturos; k++)
             todas.Add(baseMes.AddMonths(k).ToString("MM/yyyy", CultureInfo.InvariantCulture));
+        foreach (var s in doBanco ?? new List<string>())
+            todas.Add((s ?? "").Trim());
         return todas
             .Select(s => DateTime.TryParseExact(s, "MM/yyyy", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var d) ? d : (DateTime?)null)
             .Where(d => d != null)
             .OrderByDescending(d => d)
             .Select(d => d!.Value.ToString("MM/yyyy", CultureInfo.InvariantCulture))
+            .Distinct()
             .ToList();
     }
 
@@ -488,8 +494,22 @@ public partial class Form1 : Form
     }
 
     /// <summary>
+    /// Data válida digitada (dd/MM/yyyy, com ou sem barras) ou o padrão.
+    /// Usado para não apagar o período que o usuário digitou (puro, testável).
+    /// </summary>
+    public static string PreservarData(string atual, string padrao)
+    {
+        string digitos = new string((atual ?? "").Where(char.IsDigit).ToArray());
+        if (DateTime.TryParseExact(digitos, "ddMMyyyy", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out _))
+            return digitos;
+        return padrao;
+    }
+
+    /// <summary>
     /// Ajusta os campos de data (vencimento, período GRRF, data do lote) para
     /// o mês da competência selecionada, para que todas as consultas usem esse período.
+    /// Não apaga data válida já digitada (período livre).
     /// </summary>
     private void AtualizarDatasCompetencia()
     {
@@ -500,19 +520,19 @@ public partial class Form1 : Form
 
         // Vencimento (F): último dia do mês da competência
         var venc = new DateTime(mes.Year, mes.Month, DateTime.DaysInMonth(mes.Year, mes.Month));
-        mtbVencimento.Text = venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+        mtbVencimento.Text = PreservarData(mtbVencimento.Text, venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture));
 
         // Período GRRF: primeiro ao último dia do mês
         var ini = new DateTime(mes.Year, mes.Month, 1);
-        mtbGrfIni.Text = ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
-        mtbGrfFim.Text = venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+        mtbGrfIni.Text = PreservarData(mtbGrfIni.Text, ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture));
+        mtbGrfFim.Text = PreservarData(mtbGrfFim.Text, venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture));
 
         // Período próprio da tela da Folha (férias/rescisões): mesmo padrão mensal.
-        mtbFolhaIni.Text = ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
-        mtbFolhaFim.Text = venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+        mtbFolhaIni.Text = PreservarData(mtbFolhaIni.Text, ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture));
+        mtbFolhaFim.Text = PreservarData(mtbFolhaFim.Text, venc.ToString("ddMMyyyy", CultureInfo.InvariantCulture));
 
         // Data do lote: primeiro dia do mês
-        mtbGrfLote.Text = ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture);
+        mtbGrfLote.Text = PreservarData(mtbGrfLote.Text, ini.ToString("ddMMyyyy", CultureInfo.InvariantCulture));
 
         // Preenche o seletor de centro da aba Folha
         PreencherCentrosFolha();
@@ -1993,6 +2013,11 @@ public class ComboEmpresa
 {
     public int Codigo { get; }
     public string Nome { get; }
-    public ComboEmpresa(int codigo, string nome) { Codigo = codigo; Nome = nome; }
+    public string Razao { get; }
+    public ComboEmpresa(int codigo, string nome, string razao = "") { Codigo = codigo; Nome = nome; Razao = razao; }
     public override string ToString() => $"{Codigo} - {Nome}";
+    /// <summary>Nome completo para o tooltip: fantasia + razão quando diferentes.</summary>
+    public string NomeCompleto =>
+        !string.IsNullOrWhiteSpace(Razao) && !Razao.Equals(Nome, StringComparison.OrdinalIgnoreCase)
+            ? $"{Codigo} - {Nome} ({Razao})" : ToString();
 }

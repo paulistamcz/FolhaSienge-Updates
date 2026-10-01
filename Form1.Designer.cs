@@ -348,6 +348,7 @@ partial class Form1
         // cmbEmpresa
         // 
         this.cmbEmpresa.DropDownStyle = ComboBoxStyle.DropDownList;
+        this.cmbEmpresa.DropDownWidth = 420;
         this.cmbEmpresa.Enabled = false;
         this.cmbEmpresa.Location = new System.Drawing.Point(76, 20);
         this.cmbEmpresa.Name = "cmbEmpresa";
