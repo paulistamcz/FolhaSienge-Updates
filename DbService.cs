@@ -69,7 +69,7 @@ public class DbService
     public static Dictionary<int, int> CarregarMapaCentros(int empresa)
     {
         var baseOf = new Dictionary<int, int>();
-        foreach (var kv in BaseOficialCentros)
+        foreach (var kv in BaseCombinada())
             if (kv.Key.Emp == empresa) baseOf[kv.Key.Centro] = kv.Value.B;
         var arquivo = new Dictionary<int, int>();
         try
@@ -88,7 +88,8 @@ public class DbService
             }
         }
         catch { }
-        return MesclarMapa(baseOf, arquivo);
+        // A planilha (base combinada) é a fonte do B: vence o arquivo salvo.
+        return MesclarMapa(arquivo, baseOf);
     }
 
     /// <summary>Arquivo da personalização por linha da grade (EMPRESA;CENTRO;G;H;I;J).</summary>
@@ -115,18 +116,30 @@ public class DbService
         return r;
     }
 
-    /// <summary>Lê a personalização salva da grade para a empresa (centro Domínio → G/H/I/J).</summary>
+    /// <summary>Lê a personalização salva da grade para a empresa (centro Domínio → G/H/I/J).
+    /// Cada linha guarda o baseline da planilha no momento do save (BG/BH/BI);
+    /// se a planilha/mapa mudou desde então, o salvo está obsoleto e é ignorado.
+    /// Linhas no formato antigo (sem baseline) são descartadas.</summary>
     public static Dictionary<int, (string G, string H, string I, string J)> CarregarApropriacaoLinhas(int empresa)
     {
         var r = new Dictionary<int, (string G, string H, string I, string J)>();
+        var mapa = CarregarMapaCentros(empresa);
         foreach (var kv in CarregarTodasApropriacoesLinhas())
-            if (kv.Key.Emp == empresa) r[kv.Key.Centro] = kv.Value;
+        {
+            if (kv.Key.Emp != empresa) continue;
+            var v = kv.Value;
+            int b = mapa.TryGetValue(kv.Key.Centro, out var bb) ? bb : kv.Key.Centro;
+            var pad = PadraoApropriacao(empresa, kv.Key.Centro);
+            if (v.BG != b.ToString() || v.BH != (pad?.H ?? "") || v.BI != (pad?.I ?? ""))
+                continue; // planilha alterada depois do save → deixa a planilha valer
+            r[kv.Key.Centro] = (v.G, v.H, v.I, v.J);
+        }
         return r;
     }
 
-    private static Dictionary<(int Emp, int Centro), (string G, string H, string I, string J)> CarregarTodasApropriacoesLinhas()
+    private static Dictionary<(int Emp, int Centro), (string G, string H, string I, string J, string BG, string BH, string BI)> CarregarTodasApropriacoesLinhas()
     {
-        var r = new Dictionary<(int Emp, int Centro), (string G, string H, string I, string J)>();
+        var r = new Dictionary<(int Emp, int Centro), (string G, string H, string I, string J, string BG, string BH, string BI)>();
         try
         {
             var arq = ArquivoApropriacaoLinhas;
@@ -134,11 +147,11 @@ public class DbService
             foreach (var lin in File.ReadAllLines(arq))
             {
                 var p = lin.Split(';');
-                if (p.Length < 2) continue;
+                if (p.Length < 9) continue; // formato antigo (sem baseline) ou inválido
                 if (int.TryParse(p[0].Trim(), out var emp) && int.TryParse(p[1].Trim(), out var de))
                 {
-                    string v(int i) => p.Length > i ? p[i].Trim() : "";
-                    r[(emp, de)] = (v(2), v(3), v(4), v(5));
+                    string v(int i) => p[i].Trim();
+                    r[(emp, de)] = (v(2), v(3), v(4), v(5), v(6), v(7), v(8));
                 }
             }
         }
@@ -147,8 +160,9 @@ public class DbService
     }
 
     /// <summary>
-    /// Persiste a edição da grade (diff pré-preenchido × final): grava o que mudou,
-    /// remove o que voltou ao sugerido; mantém as demais empresas e centros.
+    /// Persiste a edição da grade (diff pré-preenchido × final): grava o que mudou
+    /// com o baseline atual da planilha (BG/BH/BI), remove o que voltou ao
+    /// sugerido; mantém as demais empresas/centros e descarta o formato antigo.
     /// </summary>
     public static void SalvarEdicaoApropriacao(int empresa,
         Dictionary<int, (string G, string H, string I, string J)> pre,
@@ -156,26 +170,233 @@ public class DbService
     {
         try
         {
+            var mapa = CarregarMapaCentros(empresa);
             var todas = CarregarTodasApropriacoesLinhas();
             foreach (var kv in NovasApropriacoesSalvas(pre, finais))
             {
-                if (kv.Value == null) todas.Remove((empresa, kv.Key));
-                else todas[(empresa, kv.Key)] = kv.Value.Value;
+                if (kv.Value == null) { todas.Remove((empresa, kv.Key)); continue; }
+                int b = mapa.TryGetValue(kv.Key, out var bb) ? bb : kv.Key;
+                var pad = PadraoApropriacao(empresa, kv.Key);
+                todas[(empresa, kv.Key)] = (kv.Value.Value.G, kv.Value.Value.H, kv.Value.Value.I, kv.Value.Value.J,
+                    b.ToString(), pad?.H ?? "", pad?.I ?? "");
             }
-            var linhas = new List<string> { "EMPRESA;CENTRO;G;H;I;J" };
+            var linhas = new List<string> { "EMPRESA;CENTRO;G;H;I;J;BG;BH;BI" };
             linhas.AddRange(todas.OrderBy(k => k.Key.Emp).ThenBy(k => k.Key.Centro)
-                .Select(k => $"{k.Key.Emp};{k.Key.Centro};{k.Value.G};{k.Value.H};{k.Value.I};{k.Value.J}"));
+                .Select(k => $"{k.Key.Emp};{k.Key.Centro};{k.Value.G};{k.Value.H};{k.Value.I};{k.Value.J};{k.Value.BG};{k.Value.BH};{k.Value.BI}"));
             File.WriteAllLines(ArquivoApropriacaoLinhas, linhas);
         }
         catch { }
     }
 
-    /// <summary>Mescla pura: começa na base oficial e sobrepõe o que o usuário salvou.</summary>
+    /// <summary>
+    /// Mescla pura: cópia do primeiro mapa, sobrescrita pelo segundo
+    /// (o segundo tem prioridade quando a chave existe nos dois).
+    /// </summary>
     public static Dictionary<int, int> MesclarMapa(Dictionary<int, int> baseOf, Dictionary<int, int> arquivo)
     {
         var r = new Dictionary<int, int>(baseOf);
         foreach (var kv in arquivo) r[kv.Key] = kv.Value;
         return r;
+    }
+
+    /// <summary>Linha de mapeamento lida da planilha (valores ainda crus).</summary>
+    public record LinhaBaseXlsx(int EmpDom, int CentroDom, string EmpS, string CentroS, string Uc, string Item);
+
+    /// <summary>
+    /// Procura a planilha-base no central (Resumo*.xlsx, a mais recente). Null se ausente.
+    /// </summary>
+    public static string? ArquivoBasePlanilha()
+    {
+        try
+        {
+            var dir = PastaDados;
+            if (!Directory.Exists(dir)) return null;
+            return Directory.GetFiles(dir, "Resumo*.xlsx")
+                .OrderByDescending(f => File.GetLastWriteTime(f))
+                .FirstOrDefault();
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Lê os mapeamentos da planilha (todas as abas). Linha de dados = colunas
+    /// A, B, D e E numéricas (centro/empresa Domínio, empresa/centro Sienge);
+    /// UC e item "NAO POSSUI..." viram vazio. Ignora cabeçalhos e blocos vazios.
+    /// </summary>
+    public static List<LinhaBaseXlsx> LerBasePlanilha(string caminho)
+    {
+        var r = new List<LinhaBaseXlsx>();
+        try
+        {
+            using var zip = System.IO.Compression.ZipFile.OpenRead(caminho);
+            var compartilhados = new List<string>();
+            var ss = zip.GetEntry("xl/sharedStrings.xml");
+            if (ss != null)
+            {
+                using var s = ss.Open();
+                var doc = new System.Xml.XmlDocument();
+                doc.Load(s);
+                foreach (System.Xml.XmlNode si in doc.GetElementsByTagName("si"))
+                    compartilhados.Add(si.InnerText);
+            }
+            string Cel(System.Xml.XmlNode c)
+            {
+                string t = "", v = "", inner = "";
+                foreach (System.Xml.XmlAttribute at in c.Attributes!)
+                    {
+                        if (at.LocalName == "t") t = at.Value;
+                    }
+                foreach (System.Xml.XmlNode ch in c.ChildNodes)
+                {
+                    if (ch.LocalName == "v") v = ch.InnerText;
+                    else if (ch.LocalName == "is") inner = ch.InnerText;
+                }
+                if (t == "s" && int.TryParse(v, out var idx) && idx >= 0 && idx < compartilhados.Count)
+                    return compartilhados[idx];
+                if (t == "inlineStr")
+                    return inner != "" ? inner : v;
+                return v;
+            }
+            foreach (var entry in zip.Entries
+                         .Where(e => e.FullName.StartsWith("xl/worksheets/sheet", StringComparison.OrdinalIgnoreCase) &&
+                                     e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                         .OrderBy(e => e.FullName))
+            {
+                using var s = entry.Open();
+                var doc = new System.Xml.XmlDocument();
+                doc.Load(s);
+                foreach (System.Xml.XmlNode row in doc.GetElementsByTagName("row"))
+                {
+                    var cel = new Dictionary<int, string>();
+                    foreach (System.Xml.XmlNode c in row.ChildNodes)
+                    {
+                        if (c.LocalName != "c") continue;
+                        string refer = "";
+                    foreach (System.Xml.XmlAttribute at in c.Attributes!)
+                        if (at.LocalName == "r") refer = at.Value;
+                        int letras = 0;
+                        while (letras < refer.Length && char.IsLetter(refer[letras])) letras++;
+                        int col = 0;
+                        for (int k = 0; k < letras; k++)
+                            col = col * 26 + (char.ToUpperInvariant(refer[k]) - 'A' + 1);
+                        if (col >= 1) cel[col] = Cel(c);
+                    }
+                    if (!cel.TryGetValue(1, out var a) || !cel.TryGetValue(2, out var b) ||
+                        !cel.TryGetValue(4, out var d) || !cel.TryGetValue(5, out var e5))
+                        continue;
+                    if (!int.TryParse(a.Trim(), out var centroDom) ||
+                        !int.TryParse(b.Trim(), out var empDom) ||
+                        !int.TryParse(d.Trim(), out _) ||
+                        !int.TryParse(e5.Trim(), out _))
+                        continue;
+                    cel.TryGetValue(6, out var uc);
+                    cel.TryGetValue(7, out var item);
+                    r.Add(new LinhaBaseXlsx(empDom, centroDom, d.Trim(), e5.Trim(),
+                        LimparNaoPossui(uc), LimparNaoPossui(item)));
+                }
+            }
+        }
+        catch { }
+        return r;
+    }
+
+    private static string SemAcento(string s)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var ch in (s ?? "").Normalize(System.Text.NormalizationForm.FormD))
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) !=
+                System.Globalization.UnicodeCategory.NonSpacingMark)
+                sb.Append(ch);
+        return sb.ToString();
+    }
+
+    private static string LimparNaoPossui(string? v)
+    {
+        var t = (v ?? "").Trim();
+        // A planilha usa "NÃO POSSUI" com til (e variações); compara sem acento.
+        return SemAcento(t).StartsWith("NAO POSSUI", StringComparison.OrdinalIgnoreCase) ? "" : t;
+    }
+
+    /// <summary>
+    /// Valida uma linha da planilha contra o espelho (puro, testável): o centro
+    /// precisa existir e pertencer à empresa indicada; a empresa precisa existir.
+    /// Retorna (ok, motivo quando rejeitada).
+    /// </summary>
+    public static (bool Ok, string Motivo) ValidarLinhaBase(LinhaBaseXlsx lin,
+        Dictionary<string, string> centroEmpresa, HashSet<string> empresas)
+    {
+        if (!empresas.Contains(lin.EmpS))
+            return (false, $"empresa Sienge {lin.EmpS} inexistente no espelho");
+        if (!centroEmpresa.TryGetValue(lin.CentroS, out var empDono))
+            return (false, $"centro Sienge {lin.CentroS} inexistente no espelho (atualize)");
+        if (!empDono.Trim().Equals(lin.EmpS.Trim(), StringComparison.OrdinalIgnoreCase))
+            return (false, $"centro {lin.CentroS} é da empresa {empDono}, planilha diz {lin.EmpS}");
+        return (true, "");
+    }
+
+    private static DateTime _baseXlsxQuando = DateTime.MinValue;
+    private static string? _baseXlsxArquivo;
+    private static Dictionary<(int Emp, int Centro), (int B, string G, string H, string I)>? _baseCombinada;
+    /// <summary>Motivos das linhas da planilha ignoradas na última carga (para log).</summary>
+    public static List<string> AvisosBasePlanilha { get; } = new();
+
+    /// <summary>
+    /// Base combinada: oficial embutida + planilha (validada) por cima.
+    /// Recarrega quando a planilha ou o espelho mudam. Linha rejeitada é
+    /// ignorada (vale a embutida) e o motivo vai para AvisosBasePlanilha + log.
+    /// </summary>
+    public static Dictionary<(int Emp, int Centro), (int B, string G, string H, string I)> BaseCombinada()
+    {
+        try
+        {
+            var arq = ArquivoBasePlanilha();
+            var espObras = SiengeApi.CarregarEspelhoObras();
+            var espEmps = SiengeApi.CarregarEspelhoEmpresas();
+            if (_baseCombinada != null && string.Equals(_baseXlsxArquivo, arq, StringComparison.OrdinalIgnoreCase) &&
+                (arq == null || File.GetLastWriteTime(arq) <= _baseXlsxQuando) &&
+                espObras.Data <= _baseXlsxQuando && espEmps.Data <= _baseXlsxQuando)
+                return _baseCombinada;
+            var comb = new Dictionary<(int Emp, int Centro), (int B, string G, string H, string I)>(BaseOficialCentros);
+            AvisosBasePlanilha.Clear();
+            if (arq != null)
+            {
+                var centroEmpresa = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var o in espObras.Obras) centroEmpresa[o.Codigo.Trim()] = o.Empresa.Trim();
+                var empresas = new HashSet<string>(espEmps.Empresas.Select(e => e.Id.Trim()), StringComparer.OrdinalIgnoreCase);
+                int ok = 0, fora = 0;
+                foreach (var lin in LerBasePlanilha(arq))
+                {
+                    var (valida, motivo) = ValidarLinhaBase(lin, centroEmpresa, empresas);
+                    if (!valida)
+                    {
+                        fora++;
+                        AvisosBasePlanilha.Add($"Dom {lin.EmpDom}/{lin.CentroDom} -> Sienge {lin.EmpS}/{lin.CentroS}: {motivo}");
+                        continue;
+                    }
+                    if (int.TryParse(lin.CentroS, out var b))
+                    {
+                        comb[(lin.EmpDom, lin.CentroDom)] = (b, lin.EmpS, lin.Uc, NormalizarItem(lin.Item));
+                        ok++;
+                    }
+                    else
+                    {
+                        fora++;
+                        AvisosBasePlanilha.Add($"Dom {lin.EmpDom}/{lin.CentroDom}: centro '{lin.CentroS}' inválido");
+                    }
+                }
+                _baseXlsxQuando = DateTime.Now;
+                _baseXlsxArquivo = arq;
+                Logger.LogUso("BASE_XLSX",
+                    $"{Path.GetFileName(arq)}: {ok} linha(s), {fora} ignorada(s)" +
+                    (fora > 0 ? " [" + string.Join(" | ", AvisosBasePlanilha) + "]" : ""));
+            }
+            _baseCombinada = comb;
+            return comb;
+        }
+        catch
+        {
+            return new Dictionary<(int Emp, int Centro), (int B, string G, string H, string I)>(BaseOficialCentros);
+        }
     }
 
     /// <summary>
@@ -244,17 +465,16 @@ public class DbService
         [(57, 6)] = (519, "86", "1", "ITEM 02"),
     };
 
-    /// <summary>Padrão G/H/I da base oficial para (empresa, centro); null se fora da base.
+    /// <summary>Padrão G/H/I da base combinada (oficial + planilha) para (empresa, centro); null se fora da base.
     /// O item (I) sai só com números (remove prefixo "ITEM " da planilha).</summary>
     public static (string G, string H, string I)? PadraoApropriacao(int empresa, int centro) =>
-        BaseOficialCentros.TryGetValue((empresa, centro), out var v) ? (v.G, v.H, NormalizarItem(v.I)) : null;
+        BaseCombinada().TryGetValue((empresa, centro), out var v) ? (v.G, v.H, NormalizarItem(v.I)) : null;
 
     /// <summary>
     /// Pré-preenchimento de uma linha da grade (puro, testável).
-    /// G é automático = B (centro Sienge mapeado); H/I vêm do salvo, do oficial
-    /// ou do lembrado; J do salvo ou do lembrado. Informado agora vence tudo.
-    /// Precedência: informado &gt; salvo na grade &gt; B automático (G) /
-    /// oficial (H/I) &gt; lembrado (só quando tudo vazio).
+    /// O salvo (que já passou pelo gate da planilha em CarregarApropriacaoLinhas)
+    /// vence o oficial; planilha vale quando não há salvo; lembrado só com tudo vazio.
+    /// Precedência: informado &gt; salvo &gt; planilha (base) &gt; lembrado.
     /// </summary>
     public static (string G, string H, string I, string J) PrefillLinha(
         int empresa, int centro, int b,
@@ -1004,6 +1224,46 @@ public class DbService
             decimal val = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
             if (val != 0)
                 lista.Add((cc, nome, emp, val));
+        }
+        return lista;
+    }
+
+    /// <summary>
+    /// Guia de IRRF por funcionário a partir do cálculo oficial do Domínio
+    /// (FOCALCIRRF_EMPREGADOS, periodo_inicio = competência): é o mesmo valor
+    /// que o Domínio mostra no cálculo da guia (focalcirrf) por empregado.
+    /// Quando não há cálculo gravado para a competência, cai para o fomovto
+    /// (classificacao 13, tipo 11).
+    /// </summary>
+    public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
+        GuiaIrrfAnalitico(OdbcConnection conn, string comp)
+    {
+        var sql = CompetenciaParaSql(comp);
+        var lista = new List<(int, string, int, decimal)>();
+        using (var cmd = new OdbcCommand(
+            "SELECT e.i_ccustos, TRIM(e.nome), g.i_empregados, ROUND(SUM(g.valor),2) " +
+            "FROM bethadba.FOCALCIRRF_EMPREGADOS g " +
+            "JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.periodo_inicio = ? " +
+            "GROUP BY e.i_ccustos, e.nome, g.i_empregados " +
+            "ORDER BY e.i_ccustos, e.nome", conn))
+        {
+            cmd.Parameters.AddWithValue("periodo", sql);
+            using var rd = cmd.ExecuteReader();
+            while (rd.Read())
+            {
+                int cc = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+                string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+                int emp = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
+                decimal val = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
+                if (val != 0)
+                    lista.Add((cc, nome, emp, val));
+            }
+        }
+        if (lista.Count == 0)
+        {
+            Logger.Log($"GuiaIrrfAnalitico: sem calculo em FOCALCIRRF_EMPREGADOS ({comp}); usando fomovto classe 13");
+            return GuiaAnaliticoPorClasse(conn, comp, 13);
         }
         return lista;
     }

@@ -1746,19 +1746,9 @@ public partial class Form1 : Form
         int tipoIdx = cmbGuiasTipo.SelectedIndex;
         bool analitico = cmbGuiasModo.SelectedIndex == 1;
 
-        // Pedir dados de apropriação (obra G, unidade H, item I, departamento J) ao gerar
-        string obra = "", unidade = "", itemOrc = "", departamento = "";
-            using (var dlg = new PromptApropriacao("Apropriação - Guias"))
-            {
-                if (dlg.ShowDialog(this) != DialogResult.OK)
-                    return;
-                obra = dlg.Obra;
-                unidade = dlg.Unidade;
-                itemOrc = dlg.Item;
-                departamento = dlg.Departamento;
-                PromptApropriacao.SalvarUltima(obra, unidade, itemOrc, departamento);
-                Logger.LogUso("APROPRIACAO_GUIAS", $"G={obra};H={unidade};I={itemOrc};J={departamento}");
-            }
+        // Impostos não pedem G/H/I global: cada linha usa a apropriação da
+        // obra (planilha Sienge X Dominio) e só a grade permite ajuste por linha.
+        Logger.LogUso("APROPRIACAO_GUIAS", "por linha (planilha)");
 
         Cursor = Cursors.WaitCursor;
         try
@@ -1778,7 +1768,7 @@ public partial class Form1 : Form
                 "FGTS" => "58",
                 "IRRF" => "10",
                 "GRRF" => "59",
-                "ECONSIGNADO" => "37",
+                "ECONSIGNADO" => "21",
                 _ => descricao, // outros: mantém até confirmar o código
             };
             string codCredor, nomeCredor;
@@ -1798,7 +1788,7 @@ public partial class Form1 : Form
                 "INSS" => 2,
                 "FGTS" => 58,
                 "IRRF" => 10,
-                "ECONSIGNADO" => 37,
+                "ECONSIGNADO" => 21,
                 _ => 59, // GRRF
             };
             // Documento (K): o digitado, ou base automática RRRRVVVCCCDDMMAA.
@@ -1820,7 +1810,7 @@ public partial class Form1 : Form
                         analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoPorClasse(_conn, comp, 12), x => x.Centro, centrosFiltro);
                         break;
                     case "IRRF":
-                        analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoPorClasse(_conn, comp, 13), x => x.Centro, centrosFiltro);
+                        analiticoLinhas = FiltrarPorCentro(svc.GuiaIrrfAnalitico(_conn, comp), x => x.Centro, centrosFiltro);
                         break;
                     case "FGTS":
                         analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoPorClasse(_conn, comp, 14), x => x.Centro, centrosFiltro);
@@ -1846,9 +1836,8 @@ public partial class Form1 : Form
                 // Grade única (lógica da Folha): B mapeado + G/H/I/J por linha,
                 // partindo do diálogo único. Seleção da grade filtra as linhas.
                 var gradeGuias = MontarGradeApropriacao(analiticoLinhas.Select((x, i) =>
-                    (Indice: i, Desc: $"{x.Empregado} - {x.NomeEmpregado}", Centro: x.Centro, Valor: x.Valor)),
-                    obra, unidade, itemOrc, departamento);
-                var selGuias = ExibirGradeApropriacao(gradeGuias, $"Apropriação - Guias {descricao}");
+                    (Indice: i, Desc: $"{x.Empregado} - {x.NomeEmpregado}", Centro: x.Centro, Valor: x.Valor)));
+                var selGuias = ExibirGradeApropriacao(gradeGuias, $"Apropriação - Guias {descricao}", true);
                 if (selGuias == null) return;
                 var apGuias = selGuias.ToDictionary(r => r.Indice);
                 var sb = new System.Text.StringBuilder();
@@ -1860,7 +1849,8 @@ public partial class Form1 : Form
                     if (!apGuias.TryGetValue(idx, out var ap)) continue;
                     var l = analiticoLinhas[idx];
                     var cc = ap.B.ToString("D4");
-                    var valor = l.Valor.ToString("0.00", CultureInfo.InvariantCulture);
+                    // Valor editável na grade vale no CSV (senão, o da guia).
+                    var valor = ap.Valor.ToString("0.00", CultureInfo.InvariantCulture);
                     var docLinha = numera ? $"{doc} {seq}" : doc;
                     seq++;
                     sb.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, ap.G, ap.H, ap.I, ap.J, docLinha, DbService.ObsRef(descricao.ToUpperInvariant(), comp, l.NomeEmpregado)));
@@ -1879,7 +1869,7 @@ public partial class Form1 : Form
                 foreach (var r in selGuias)
                 {
                     var l = analiticoLinhas[r.Indice];
-                    dt.Rows.Add(r.B.ToString("D4"), l.Empregado, l.NomeEmpregado, l.Valor);
+                    dt.Rows.Add(r.B.ToString("D4"), l.Empregado, l.NomeEmpregado, r.Valor);
                 }
                 dgvGuias.DataSource = dt;
                 dgvGuias.Columns["Centro"].Width = 70;
@@ -1905,7 +1895,7 @@ public partial class Form1 : Form
                     var analiticoTodos = descricao.ToUpperInvariant() switch
                     {
                         "INSS" => svc.GuiaAnaliticoPorClasse(_conn, comp, 12),
-                        "IRRF" => svc.GuiaAnaliticoPorClasse(_conn, comp, 13),
+                        "IRRF" => svc.GuiaIrrfAnalitico(_conn, comp),
                         "FGTS" => svc.GuiaAnaliticoPorClasse(_conn, comp, 14),
                         _ => svc.GuiaAnaliticoEmprestimos(_conn, 49, comp),
                     };
@@ -1930,9 +1920,8 @@ public partial class Form1 : Form
                     .ToList();
                 if (!PedirMapaCentros(linhasCompletas.Select(x => x.Centro))) return;
                 var gradeGuiasC = MontarGradeApropriacao(linhasCompletas.Select((x, i) =>
-                    (Indice: i, Desc: $"{x.Centro:D4} - {x.Nome}", Centro: x.Centro, Valor: x.Total)),
-                    obra, unidade, itemOrc, departamento);
-                var selGuiasC = ExibirGradeApropriacao(gradeGuiasC, $"Apropriação - Guias {descricao}");
+                    (Indice: i, Desc: $"{x.Centro:D4} - {x.Nome}", Centro: x.Centro, Valor: x.Total)));
+                var selGuiasC = ExibirGradeApropriacao(gradeGuiasC, $"Apropriação - Guias {descricao}", true);
                 if (selGuiasC == null) return;
                 var apGuiasC = selGuiasC.ToDictionary(r => r.Indice);
                 var sb2 = new System.Text.StringBuilder();
@@ -1944,7 +1933,8 @@ public partial class Form1 : Form
                     if (!apGuiasC.TryGetValue(idx, out var ap)) continue;
                     var l = linhasCompletas[idx];
                     var cc = ap.B.ToString("D4");
-                    var valor = l.Total.ToString("0.00", CultureInfo.InvariantCulture);
+                    // Valor editável na grade vale no CSV (senão, o total da guia).
+                    var valor = ap.Valor.ToString("0.00", CultureInfo.InvariantCulture);
                     var docLinha2 = numera2 ? $"{doc} {i}" : doc;
                     sb2.AppendLine(DbService.LinhaCsv(verbaGuia, cc, codCredor, nomeCredor, valor, venc, ap.G, ap.H, ap.I, ap.J, docLinha2, DbService.ObsRef(descricao.ToUpperInvariant(), comp, "CENTRO DE CUSTO: " + l.Nome)));
                     i++;
@@ -1962,7 +1952,7 @@ public partial class Form1 : Form
                 foreach (var r in selGuiasC)
                 {
                     var l = linhasCompletas[r.Indice];
-                    dt2.Rows.Add(r.B.ToString("D4"), l.Nome, l.Total);
+                    dt2.Rows.Add(r.B.ToString("D4"), l.Nome, r.Valor);
                 }
                 dgvGuias.DataSource = dt2;
                 dgvGuias.Columns["Centro"].Width = 70;
