@@ -350,6 +350,7 @@ public partial class Form1 : Form
             btnGerarCsv.Enabled = false;
             btnSalvarCsv.Enabled = false;
             dgvCentros.DataSource = null;
+            CarregarGridCentros();
         }
         catch (Exception ex)
         {
@@ -491,6 +492,7 @@ public partial class Form1 : Form
     {
         AtualizarDocumento();
         AtualizarDatasCompetencia();
+        CarregarGridCentros();
     }
 
     /// <summary>
@@ -539,18 +541,20 @@ public partial class Form1 : Form
         PreencherCentrosGuias();
     }
 
-    /// <summary>Preenche o combo de centro de custo da aba Folha com os centros da competência.</summary>
+    /// <summary>
+    /// Preenche o combo de centro de custo da aba Folha com a opção "Todos" e
+    /// todos os centros da empresa (mesmo sem lançamento no mês), para poder
+    /// filtrar em um centro específico.
+    /// </summary>
     private void PreencherCentrosFolha()
     {
-        string comp = cmbCompetencia.SelectedItem?.ToString() ?? "";
-        int tipoProcess = TipoProcessoTipoFolha();
         cmbFolhaCentro.Items.Clear();
         cmbFolhaCentro.Items.Add(new ComboCentro(0, "Todos os centros"));
         try
         {
-            if (_conn != null && !string.IsNullOrWhiteSpace(comp))
+            if (_conn != null)
             {
-                foreach (var c in new DbService().ListarCentrosCusto(_conn, comp, tipoProcess))
+                foreach (var c in new DbService().ListarTodosCentrosCusto(_conn))
                     cmbFolhaCentro.Items.Add(new ComboCentro(c.Codigo, c.Nome));
             }
         }
@@ -841,8 +845,18 @@ public partial class Form1 : Form
             MessageBox.Show("Selecione uma competência.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        string comp = cmbCompetencia.SelectedItem.ToString()!;
-        var centros = new DbService().ListarCentrosCusto(_conn!, comp, TipoProcessoTipoFolha());
+        CarregarGridCentros();
+    }
+
+    /// <summary>
+    /// Preenche a grade da aba Consolidar com todos os centros de custo da empresa
+    /// (foccustos), mesmo sem lançamento no mês selecionado; totais entram zerados
+    /// e são preenchidos ao gerar.
+    /// </summary>
+    private void CarregarGridCentros()
+    {
+        if (_conn == null || cmbCompetencia.SelectedItem == null) return;
+        var centros = new DbService().ListarTodosCentrosCusto(_conn);
 
         var dt = new DataTable();
         dt.Columns.Add("Sel", typeof(bool));

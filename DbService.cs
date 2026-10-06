@@ -805,6 +805,23 @@ public class DbService
         return lista;
     }
 
+    /// <summary>Todos os centros de custo da empresa (foccustos), mesmo sem lançamento no mês.</summary>
+    public List<(int Codigo, string Nome)> ListarTodosCentrosCusto(OdbcConnection conn)
+    {
+        var lista = new List<(int, string)>();
+        using var cmd = new OdbcCommand(
+            "SELECT i_ccustos, MIN(nome) FROM bethadba.foccustos " +
+            "WHERE codi_emp = " + DbService.Empresa + " GROUP BY i_ccustos ORDER BY i_ccustos", conn);
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read())
+        {
+            int cod = rd.IsDBNull(0) ? 0 : Convert.ToInt32(rd[0]);
+            string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
+            lista.Add((cod, nome));
+        }
+        return lista;
+    }
+
     public (int Empregados, decimal Total) TotalPorCentro(OdbcConnection conn, string comp, int centro, int tipoProcess = 11)
     {
         var sql = CompetenciaParaSql(comp);
@@ -996,7 +1013,8 @@ public class DbService
     }
 
     /// <summary>
-    /// Férias por empregado num período de pagamento (analítico).
+    /// Férias por empregado num período (analítico) - período = INÍCIO DO GOZO
+    /// (f.INICIO_GOZO); sem data de gozo, cai para a data de pagamento.
     /// Retorna (Centro, NomeEmpregado, Empregado, Valor, IniGozo, FimGozo, Dias)
     /// por concessão, usando o líquido (PROVENTOS − DESCONTOS), igual ao recibo.
     /// </summary>
@@ -1009,7 +1027,7 @@ public class DbService
             "f.INICIO_GOZO, f.FIM_GOZO, f.DIAS_FERIAS " +
             "FROM bethadba.FOFERIAS f " +
             "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
-            "WHERE f.CODI_EMP = " + DbService.Empresa + " AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
+            "WHERE f.CODI_EMP = " + DbService.Empresa + " AND ISNULL(f.INICIO_GOZO, f.DATA_PAGTO) >= ? AND ISNULL(f.INICIO_GOZO, f.DATA_PAGTO) <= ? " +
             "AND ROUND((f.PROVENTOS - f.DESCONTOS), 2) > 0 " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         cmd.Parameters.AddWithValue("ini", ini);
@@ -1030,7 +1048,8 @@ public class DbService
     }
 
     /// <summary>
-    /// Férias por centro (completo) num período de pagamento (líquido = PROVENTOS − DESCONTOS).
+    /// Férias por centro (completo) num período (início do gozo; sem data de gozo,
+    /// cai para a data de pagamento). Líquido = PROVENTOS − DESCONTOS.
     /// Retorna (Centro, Nome, Empregados, Total, IniGozoMin, FimGozoMax, DiasTotal).
     /// </summary>
     public List<(int Centro, string Nome, int Empregados, decimal Total, DateTime IniGozo, DateTime FimGozo, int Dias)>
@@ -1043,7 +1062,7 @@ public class DbService
             "FROM bethadba.FOFERIAS f " +
             "LEFT JOIN bethadba.foempregados e ON f.CODI_EMP = e.codi_emp AND f.I_EMPREGADOS = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE f.CODI_EMP = " + DbService.Empresa + " AND f.DATA_PAGTO >= ? AND f.DATA_PAGTO <= ? " +
+            "WHERE f.CODI_EMP = " + DbService.Empresa + " AND ISNULL(f.INICIO_GOZO, f.DATA_PAGTO) >= ? AND ISNULL(f.INICIO_GOZO, f.DATA_PAGTO) <= ? " +
             "AND ROUND((f.PROVENTOS - f.DESCONTOS), 2) > 0 " +
             "GROUP BY e.i_ccustos, c.nome ORDER BY e.i_ccustos", conn);
         cmd.Parameters.AddWithValue("ini", ini);
@@ -1114,6 +1133,8 @@ public class DbService
         "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517))";
 
     /// Rescisões por empregado num período (analítico) - base = líquido (fomovto P − D).
+    /// O período usa a data registrada na rescisão (forescisoes.demissao, a data
+    /// inserida na rescisão); sem registro de rescisão, cai para o vencimento da GRFC.
     /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa.
     /// </summary>
     public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
@@ -1124,8 +1145,9 @@ public class DbService
             "SELECT e.i_ccustos, TRIM(e.nome), g.i_empregados, " +
             "ROUND(" + LiquidoRescisaoSql + ", 2) " +
             "FROM bethadba.foguiagrfc g " +
+            "LEFT JOIN bethadba.forescisoes r ON r.codi_emp = g.codi_emp AND r.i_calculos = g.i_calculos " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
-            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND ISNULL(r.demissao, g.vencimento) >= ? AND ISNULL(r.demissao, g.vencimento) <= ? " +
             "AND (" + LiquidoRescisaoSql + ") > 0 " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         cmd.Parameters.AddWithValue("ini", ini);
@@ -1144,6 +1166,8 @@ public class DbService
 
     /// <summary>
     /// Rescisões por centro (completo) num período - base = líquido (fomovto P − D).
+    /// O período usa a data registrada na rescisão (forescisoes.demissao); sem
+    /// registro, cai para o vencimento da GRFC (mesmo critério do analítico).
     /// Retorna (Centro, Nome, Empregados, Total).
     /// </summary>
     public List<(int Centro, string Nome, int Empregados, decimal Total)>
@@ -1155,11 +1179,12 @@ public class DbService
             "ROUND(SUM(CASE WHEN m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1 THEN m.valor_cal ELSE 0 END) - " +
             "SUM(CASE WHEN m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END), 2) " +
             "FROM bethadba.foguiagrfc g " +
+            "LEFT JOIN bethadba.forescisoes r ON r.codi_emp = g.codi_emp AND r.i_calculos = g.i_calculos " +
             "JOIN bethadba.fomovto m ON m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos " +
             "JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND ISNULL(r.demissao, g.vencimento) >= ? AND ISNULL(r.demissao, g.vencimento) <= ? " +
             "GROUP BY e.i_ccustos, c.nome " +
             "HAVING (SUM(CASE WHEN m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1 THEN m.valor_cal ELSE 0 END) - " +
             "SUM(CASE WHEN m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END)) > 0 " +
