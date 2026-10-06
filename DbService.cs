@@ -932,6 +932,8 @@ public class DbService
     /// <summary>
     /// Folha líquida por empregado (analítico) da competência, tipo_process 11.
     /// Retorna (Centro, NomeEmpregado, Empregado, Liquido) por pessoa.
+    /// Não retorna linhas de pagamento de rescisão (I_CALCULOS ligado a
+    /// forescisoes/foguiagrfc): quem tem rescisão sai da folha.
     /// </summary>
     public List<(int Centro, string NomeEmpregado, int Empregado, decimal Liquido)>
         ListarFolhaAnalitica(OdbcConnection conn, string comp, int tipoProcess = 11)
@@ -945,6 +947,10 @@ public class DbService
             "LEFT JOIN bethadba.foempregados e ON f.codi_emp = e.codi_emp AND f.i_empregados = e.i_empregados " +
             "WHERE l.competencia = ? AND f.codi_emp = " + DbService.Empresa + " AND l.tipo_process = ? " +
             "AND ROUND(f.liquido, 2) > 0 " +
+            "AND NOT EXISTS (SELECT 1 FROM bethadba.forescisoes r " +
+            "  WHERE r.codi_emp = f.codi_emp AND r.i_empregados = f.i_empregados AND r.i_calculos = f.I_CALCULOS) " +
+            "AND NOT EXISTS (SELECT 1 FROM bethadba.foguiagrfc gf " +
+            "  WHERE gf.codi_emp = f.codi_emp AND gf.i_empregados = f.i_empregados AND gf.i_calculos = f.I_CALCULOS) " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         cmd.Parameters.AddWithValue("competencia", sql);
         cmd.Parameters.AddWithValue("tipo", tipoProcess);
@@ -1109,11 +1115,18 @@ public class DbService
     /// Líquido da rescisão: proventos − descontos que compõem o líquido
     /// (COMPOE_LIQUIDO=1; exclui os eventos virtuais 51/8517 e as linhas
     /// informativas como DEPENDENTE IRRF e FGTS).
-    private const string LiquidoRescisaoSql =
-        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1) - " +
-        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517))";
+    private static string LiquidoRescisao(string alias) =>
+        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = " + alias + ".codi_emp AND m.i_calculos = " + alias + ".i_calculos AND m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1) - " +
+        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = " + alias + ".codi_emp AND m.i_calculos = " + alias + ".i_calculos AND m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517))";
+
+    private static readonly string LiquidoRescisaoSql = LiquidoRescisao("g");
 
     /// Rescisões por empregado num período (analítico) - base = líquido (fomovto P − D).
+    /// O período é a DATA DE AFASTAMENTO (forescisoes.demissao); sem registro
+    /// de rescisão, cai para o vencimento da GRFC.
+    /// Inclui rescisões calculadas no Domínio mas SEM guia GRFC (foguiagrfc
+    /// vazio): o líquido sai do próprio cálculo (ex.: demissões de 05/10/2026
+    /// em que a guia ainda não foi gerada).
     /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa.
     /// </summary>
     public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
@@ -1121,15 +1134,29 @@ public class DbService
     {
         var lista = new List<(int, string, int, decimal)>();
         using var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, TRIM(e.nome), g.i_empregados, " +
-            "ROUND(" + LiquidoRescisaoSql + ", 2) " +
+            "SELECT centro, nome, empregado, valor FROM (" +
+            // 1) com guia GRFC (fonte original): período = afastamento, senão vencimento
+            "SELECT e.i_ccustos AS centro, TRIM(e.nome) AS nome, g.i_empregados AS empregado, " +
+            "ROUND(" + LiquidoRescisao("g") + ", 2) AS valor " +
             "FROM bethadba.foguiagrfc g " +
+            "LEFT JOIN bethadba.forescisoes r ON r.codi_emp = g.codi_emp AND r.i_calculos = g.i_calculos " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
-            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
-            "AND (" + LiquidoRescisaoSql + ") > 0 " +
-            "ORDER BY e.i_ccustos, e.nome", conn);
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND ISNULL(r.demissao, g.vencimento) >= ? AND ISNULL(r.demissao, g.vencimento) <= ? " +
+            "AND (" + LiquidoRescisao("g") + ") > 0 " +
+            "UNION ALL " +
+            // 2) calculada sem guia GRFC: período = afastamento; exclui as que já têm guia
+            "SELECT e.i_ccustos, TRIM(e.nome), r.i_empregados, " +
+            "ROUND(" + LiquidoRescisao("r") + ", 2) " +
+            "FROM bethadba.forescisoes r " +
+            "LEFT JOIN bethadba.foempregados e ON r.codi_emp = e.codi_emp AND r.i_empregados = e.i_empregados " +
+            "WHERE r.codi_emp = " + DbService.Empresa + " AND r.demissao >= ? AND r.demissao <= ? " +
+            "AND NOT EXISTS (SELECT 1 FROM bethadba.foguiagrfc g WHERE g.codi_emp = r.codi_emp AND g.i_calculos = r.i_calculos) " +
+            "AND (" + LiquidoRescisao("r") + ") > 0" +
+            ") x ORDER BY centro, nome", conn);
         cmd.Parameters.AddWithValue("ini", ini);
         cmd.Parameters.AddWithValue("fim", fim);
+        cmd.Parameters.AddWithValue("ini2", ini);
+        cmd.Parameters.AddWithValue("fim2", fim);
         using var rd = cmd.ExecuteReader();
         while (rd.Read())
         {
@@ -1144,28 +1171,41 @@ public class DbService
 
     /// <summary>
     /// Rescisões por centro (completo) num período - base = líquido (fomovto P − D).
+    /// O período é a DATA DE AFASTAMENTO (forescisoes.demissao); sem registro
+    /// de rescisão, cai para o vencimento da GRFC.
+    /// Agrega por pessoa com o mesmo critério do analítico (líquido > 0) e
+    /// inclui rescisões sem guia GRFC, para o total por centro bater com a
+    /// lista por pessoa.
     /// Retorna (Centro, Nome, Empregados, Total).
     /// </summary>
     public List<(int Centro, string Nome, int Empregados, decimal Total)>
         ResumoRescisaoCentros(OdbcConnection conn, DateTime ini, DateTime fim)
     {
-        var lista = new List<(int, string, int, decimal)>();
+        var porCentro = new Dictionary<int, (string Nome, HashSet<int> Emps, decimal Total)>();
         using var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, c.nome, COUNT(DISTINCT g.i_empregados), " +
-            "ROUND(SUM(CASE WHEN m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1 THEN m.valor_cal ELSE 0 END) - " +
-            "SUM(CASE WHEN m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END), 2) " +
+            "SELECT centro, nome, empregado, valor FROM (" +
+            "SELECT e.i_ccustos AS centro, c.nome AS nome, g.i_empregados AS empregado, " +
+            "ROUND(" + LiquidoRescisao("g") + ", 2) AS valor " +
             "FROM bethadba.foguiagrfc g " +
-            "JOIN bethadba.fomovto m ON m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos " +
-            "JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
+            "LEFT JOIN bethadba.forescisoes r ON r.codi_emp = g.codi_emp AND r.i_calculos = g.i_calculos " +
             "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE g.codi_emp = " + DbService.Empresa + " AND g.vencimento >= ? AND g.vencimento <= ? " +
-            "GROUP BY e.i_ccustos, c.nome " +
-            "HAVING (SUM(CASE WHEN m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1 THEN m.valor_cal ELSE 0 END) - " +
-            "SUM(CASE WHEN m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END)) > 0 " +
-            "ORDER BY e.i_ccustos", conn);
+            "WHERE g.codi_emp = " + DbService.Empresa + " AND ISNULL(r.demissao, g.vencimento) >= ? AND ISNULL(r.demissao, g.vencimento) <= ? " +
+            "AND (" + LiquidoRescisao("g") + ") > 0 " +
+            "UNION ALL " +
+            "SELECT e.i_ccustos, c.nome, r.i_empregados, " +
+            "ROUND(" + LiquidoRescisao("r") + ", 2) " +
+            "FROM bethadba.forescisoes r " +
+            "LEFT JOIN bethadba.foempregados e ON r.codi_emp = e.codi_emp AND r.i_empregados = e.i_empregados " +
+            "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
+            "WHERE r.codi_emp = " + DbService.Empresa + " AND r.demissao >= ? AND r.demissao <= ? " +
+            "AND NOT EXISTS (SELECT 1 FROM bethadba.foguiagrfc g WHERE g.codi_emp = r.codi_emp AND g.i_calculos = r.i_calculos) " +
+            "AND (" + LiquidoRescisao("r") + ") > 0" +
+            ") x", conn);
         cmd.Parameters.AddWithValue("ini", ini);
         cmd.Parameters.AddWithValue("fim", fim);
+        cmd.Parameters.AddWithValue("ini2", ini);
+        cmd.Parameters.AddWithValue("fim2", fim);
         using var rd = cmd.ExecuteReader();
         while (rd.Read())
         {
@@ -1173,9 +1213,15 @@ public class DbService
             string nome = rd.IsDBNull(1) ? "" : Convert.ToString(rd[1])!;
             int emp = rd.IsDBNull(2) ? 0 : Convert.ToInt32(rd[2]);
             decimal tot = rd.IsDBNull(3) ? 0m : Convert.ToDecimal(rd[3]);
-            lista.Add((cc, nome, emp, tot));
+            if (!porCentro.TryGetValue(cc, out var b))
+                b = (nome, new HashSet<int>(), 0m);
+            b.Emps.Add(emp);
+            porCentro[cc] = (b.Nome != "" ? b.Nome : nome, b.Emps, b.Total + tot);
         }
-        return lista;
+        return porCentro
+            .OrderBy(kv => kv.Key)
+            .Select(kv => (kv.Key, kv.Value.Nome, kv.Value.Emps.Count, kv.Value.Total))
+            .ToList();
     }
 
     /// <summary>Total líquido da folha da competência (tipo_process 11), mesma base do CSV.</summary>
@@ -1232,6 +1278,11 @@ public class DbService
     /// Guia de IRRF por funcionário a partir do cálculo oficial do Domínio
     /// (FOCALCIRRF_EMPREGADOS, periodo_inicio = competência): é o mesmo valor
     /// que o Domínio mostra no cálculo da guia (focalcirrf) por empregado.
+    /// O centro vem de FOBASES.i_ccustos da competência (mesma fonte do
+    /// relatório "Relação das Bases do IRRF" do Domínio), com fallback para
+    /// foempregados.i_ccustos (cadastro atual) quando não há linha de base —
+    /// resolve transferências feitas depois da competência (ex.: 09/2026:
+    /// empregado em 178 na base, já em 544 no cadastro).
     /// Quando não há cálculo gravado para a competência, cai para o fomovto
     /// (classificacao 13, tipo 11).
     /// </summary>
@@ -1241,12 +1292,14 @@ public class DbService
         var sql = CompetenciaParaSql(comp);
         var lista = new List<(int, string, int, decimal)>();
         using (var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, TRIM(e.nome), g.i_empregados, ROUND(SUM(g.valor),2) " +
+            "SELECT ISNULL(NULLIF(b.i_ccustos,0), e.i_ccustos), TRIM(e.nome), g.i_empregados, ROUND(SUM(g.valor),2) " +
             "FROM bethadba.FOCALCIRRF_EMPREGADOS g " +
             "JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
+            "LEFT JOIN bethadba.FOBASES b ON b.codi_emp = g.codi_emp AND b.i_empregados = g.i_empregados " +
+            "AND b.competencia = g.periodo_inicio AND b.tipo_process = 11 " +
             "WHERE g.codi_emp = " + DbService.Empresa + " AND g.periodo_inicio = ? " +
-            "GROUP BY e.i_ccustos, e.nome, g.i_empregados " +
-            "ORDER BY e.i_ccustos, e.nome", conn))
+            "GROUP BY ISNULL(NULLIF(b.i_ccustos,0), e.i_ccustos), e.nome, g.i_empregados " +
+            "ORDER BY ISNULL(NULLIF(b.i_ccustos,0), e.i_ccustos), e.nome", conn))
         {
             cmd.Parameters.AddWithValue("periodo", sql);
             using var rd = cmd.ExecuteReader();
@@ -1272,13 +1325,15 @@ public class DbService
     /// Guia analítica por funcionário para eCONSIGNADO (empréstimos) ou GRRF (rescisão).
     /// Retorna (Centro, NomeEmpregado, Empregado, Valor).
     /// Com competência (MM/AAAA), filtra o mês (fomovto acumula meses); sem ela, soma tudo.
+    /// classes: classificações a incluir (ex.: 49 e 50 = consignado normal e férias);
+    /// sem classes, cai para o filtro por nome "DESC. EMP. CRED. TRAB%".
     /// </summary>
     public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
-        GuiaAnaliticoEmprestimos(OdbcConnection conn, int classeEmprestimo = 0, string comp = "")
+        GuiaAnaliticoEmprestimos(OdbcConnection conn, string comp = "", params int[] classes)
     {
         var lista = new List<(int, string, int, decimal)>();
-        string filtroClasse = classeEmprestimo > 0
-            ? " AND ev.classificacao = ?"
+        string filtroClasse = classes.Length > 0
+            ? " AND ev.classificacao IN (" + string.Join(",", classes) + ")"
             : " AND ev.nome LIKE 'DESC. EMP. CRED. TRAB%'";
         string filtroComp = "";
         string sql = "";
@@ -1296,8 +1351,6 @@ public class DbService
             "AND m.prov_desc = 'D'" + filtroClasse + filtroComp +
             " GROUP BY e.i_ccustos, e.nome, m.i_empregados " +
             "ORDER BY e.i_ccustos, e.nome", conn);
-        if (classeEmprestimo > 0)
-            cmd.Parameters.AddWithValue("cls", classeEmprestimo);
         if (filtroComp != "")
         {
             cmd.Parameters.AddWithValue("ini", sql);
@@ -1466,7 +1519,7 @@ public class DbService
             case 28: return (12, "2.01.02.03"); // vale transporte
             case 25: return (6, "2.01.02.02"); // adiantamento salarial
             case 26: case 27: case 29: case 40: case 17: return (5, "2.01.02.01"); // outros descontos (PLR/plano/pensão)
-            case 49: case 50: return (20, "2.02.02.25"); // empréstimo consignado
+            case 49: case 50: return (21, "2.01.02.24"); // empréstimo consignado
             default: return (0, "");
         }
     }
