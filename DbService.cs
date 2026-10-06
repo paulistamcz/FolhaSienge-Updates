@@ -1232,6 +1232,11 @@ public class DbService
     /// Guia de IRRF por funcionário a partir do cálculo oficial do Domínio
     /// (FOCALCIRRF_EMPREGADOS, periodo_inicio = competência): é o mesmo valor
     /// que o Domínio mostra no cálculo da guia (focalcirrf) por empregado.
+    /// O centro vem de FOBASES.i_ccustos da competência (mesma fonte do
+    /// relatório "Relação das Bases do IRRF" do Domínio), com fallback para
+    /// foempregados.i_ccustos (cadastro atual) quando não há linha de base —
+    /// resolve transferências feitas depois da competência (ex.: 09/2026:
+    /// empregado em 178 na base, já em 544 no cadastro).
     /// Quando não há cálculo gravado para a competência, cai para o fomovto
     /// (classificacao 13, tipo 11).
     /// </summary>
@@ -1241,12 +1246,14 @@ public class DbService
         var sql = CompetenciaParaSql(comp);
         var lista = new List<(int, string, int, decimal)>();
         using (var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, TRIM(e.nome), g.i_empregados, ROUND(SUM(g.valor),2) " +
+            "SELECT ISNULL(NULLIF(b.i_ccustos,0), e.i_ccustos), TRIM(e.nome), g.i_empregados, ROUND(SUM(g.valor),2) " +
             "FROM bethadba.FOCALCIRRF_EMPREGADOS g " +
             "JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
+            "LEFT JOIN bethadba.FOBASES b ON b.codi_emp = g.codi_emp AND b.i_empregados = g.i_empregados " +
+            "AND b.competencia = g.periodo_inicio AND b.tipo_process = 11 " +
             "WHERE g.codi_emp = " + DbService.Empresa + " AND g.periodo_inicio = ? " +
-            "GROUP BY e.i_ccustos, e.nome, g.i_empregados " +
-            "ORDER BY e.i_ccustos, e.nome", conn))
+            "GROUP BY ISNULL(NULLIF(b.i_ccustos,0), e.i_ccustos), e.nome, g.i_empregados " +
+            "ORDER BY ISNULL(NULLIF(b.i_ccustos,0), e.i_ccustos), e.nome", conn))
         {
             cmd.Parameters.AddWithValue("periodo", sql);
             using var rd = cmd.ExecuteReader();
@@ -1272,13 +1279,15 @@ public class DbService
     /// Guia analítica por funcionário para eCONSIGNADO (empréstimos) ou GRRF (rescisão).
     /// Retorna (Centro, NomeEmpregado, Empregado, Valor).
     /// Com competência (MM/AAAA), filtra o mês (fomovto acumula meses); sem ela, soma tudo.
+    /// classes: classificações a incluir (ex.: 49 e 50 = consignado normal e férias);
+    /// sem classes, cai para o filtro por nome "DESC. EMP. CRED. TRAB%".
     /// </summary>
     public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
-        GuiaAnaliticoEmprestimos(OdbcConnection conn, int classeEmprestimo = 0, string comp = "")
+        GuiaAnaliticoEmprestimos(OdbcConnection conn, string comp = "", params int[] classes)
     {
         var lista = new List<(int, string, int, decimal)>();
-        string filtroClasse = classeEmprestimo > 0
-            ? " AND ev.classificacao = ?"
+        string filtroClasse = classes.Length > 0
+            ? " AND ev.classificacao IN (" + string.Join(",", classes) + ")"
             : " AND ev.nome LIKE 'DESC. EMP. CRED. TRAB%'";
         string filtroComp = "";
         string sql = "";
@@ -1296,8 +1305,6 @@ public class DbService
             "AND m.prov_desc = 'D'" + filtroClasse + filtroComp +
             " GROUP BY e.i_ccustos, e.nome, m.i_empregados " +
             "ORDER BY e.i_ccustos, e.nome", conn);
-        if (classeEmprestimo > 0)
-            cmd.Parameters.AddWithValue("cls", classeEmprestimo);
         if (filtroComp != "")
         {
             cmd.Parameters.AddWithValue("ini", sql);
@@ -1466,7 +1473,7 @@ public class DbService
             case 28: return (12, "2.01.02.03"); // vale transporte
             case 25: return (6, "2.01.02.02"); // adiantamento salarial
             case 26: case 27: case 29: case 40: case 17: return (5, "2.01.02.01"); // outros descontos (PLR/plano/pensão)
-            case 49: case 50: return (20, "2.02.02.25"); // empréstimo consignado
+            case 49: case 50: return (21, "2.01.02.24"); // empréstimo consignado
             default: return (0, "");
         }
     }

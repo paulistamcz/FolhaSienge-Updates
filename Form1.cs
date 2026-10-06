@@ -1816,7 +1816,7 @@ public partial class Form1 : Form
                         analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoPorClasse(_conn, comp, 14), x => x.Centro, centrosFiltro);
                         break;
                     case "ECONSIGNADO":
-                        analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoEmprestimos(_conn, 49, comp), x => x.Centro, centrosFiltro);
+                        analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoEmprestimos(_conn, comp, 49, 50), x => x.Centro, centrosFiltro);
                         break;
                     case "GRRF":
                         analiticoLinhas = FiltrarPorCentro(
@@ -1897,7 +1897,7 @@ public partial class Form1 : Form
                         "INSS" => svc.GuiaAnaliticoPorClasse(_conn, comp, 12),
                         "IRRF" => svc.GuiaIrrfAnalitico(_conn, comp),
                         "FGTS" => svc.GuiaAnaliticoPorClasse(_conn, comp, 14),
-                        _ => svc.GuiaAnaliticoEmprestimos(_conn, 49, comp),
+                        _ => svc.GuiaAnaliticoEmprestimos(_conn, comp, 49, 50),
                     };
                     var agrupado = analiticoTodos
                         .Where(l => centrosFiltro.Count == 0 || centrosFiltro.Contains(l.Centro))

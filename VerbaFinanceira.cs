@@ -26,6 +26,7 @@ public class VerbaFinanceira
         new() { Codigo = 3,    Descricao = "FERIAS", PlanoFinanceiro = "2.01.02.02", Credor = "FERIAS", CredorCodigo = "1224", Documento = "RF", FormaPagamento = "Pagamento de Salário" },
         new() { Codigo = 4,    Descricao = "RESCISAO", PlanoFinanceiro = "2.01.02.02", Credor = "RESCISAO", CredorCodigo = "", Documento = "1", FormaPagamento = "Pagamento de Salário" },
         new() { Codigo = 59,   Descricao = "GRRF", PlanoFinanceiro = "2.01.02.13", Credor = "CAIXA ECONOMICA FEDERAL", CredorCodigo = "37", Documento = "GRRF", FormaPagamento = "CEF Tributos / contas de consumo" },
+        new() { Codigo = 21,   Descricao = "ECONSIGNADO", PlanoFinanceiro = "2.01.02.24", Credor = "CAIXA ECONOMICA FEDERAL", CredorCodigo = "37", Documento = "", FormaPagamento = "CEF Tributos / contas de consumo" },
         new() { Codigo = 5,    Descricao = "PLR", PlanoFinanceiro = "2.01.02.01", Credor = "FOLHA", CredorCodigo = "", Documento = "FL", FormaPagamento = "Pagamento de Salário" },
         new() { Codigo = 7,    Descricao = "SESI", PlanoFinanceiro = "2.02.02.24", Credor = "SESI - AL", CredorCodigo = "300", Documento = "FAT", FormaPagamento = "Boletos Bancário (outros bancos)" },
         new() { Codigo = 8,    Descricao = "SENAI", PlanoFinanceiro = "2.02.02.25", Credor = "SENAI - AL", CredorCodigo = "304", Documento = "FAT", FormaPagamento = "Boletos Bancário (outros bancos)" },
