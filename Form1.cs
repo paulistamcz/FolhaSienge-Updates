@@ -1599,13 +1599,22 @@ public partial class Form1 : Form
             }
             else
             {
-                // Lista analítica (por funcionário); no completo abre uma janela por
-                // centro, uma por vez, para conferir e selecionar os funcionários.
-                var analiticas = FiltrarPorCentro(
-                    svc.ListarFolhaAnalitica(_conn, comp, tipoProcess)
+                // Lista analítica (por funcionário) para permitir seleção antes de agrupar por centro.
+                List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)> analiticas;
+                List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor, DateTime IniGozo, DateTime FimGozo, int Dias)>? feriasBase = null;
+                if (tipo == 2)
+                {
+                    feriasBase = FiltrarPorCentro(svc.ListarFeriasAnalitica(_conn, ini, fim), x => x.Centro, centrosFiltro);
+                    analiticas = feriasBase.Select(x => (x.Centro, x.NomeEmpregado, x.Empregado, x.Valor)).ToList();
+                }
+                else if (tipo == 3)
+                    analiticas = svc.ListarRescisaoAnalitica(_conn, ini, fim);
+                else
+                    analiticas = svc.ListarFolhaAnalitica(_conn, comp, tipoProcess)
                         .Select(x => (x.Centro, x.NomeEmpregado, x.Empregado, x.Liquido))
-                        .ToList(),
-                    x => x.Centro, centrosFiltro);
+                        .ToList();
+
+                analiticas = FiltrarPorCentro(analiticas, x => x.Centro, centrosFiltro);
                 if (analiticas.Count == 0)
                 {
                     MessageBox.Show("Nenhum funcionário no período.", "Aviso",
@@ -1613,46 +1622,59 @@ public partial class Form1 : Form
                     return;
                 }
 
-                var porCentro = analiticas
+                var agrupados = analiticas
                     .GroupBy(x => x.Centro)
-                    .OrderBy(x => x.Key)
+                    .OrderBy(g => g.Key)
+                    .Select(g => (Centro: g.Key, Empregados: g.Count(), Total: g.Sum(x => x.Valor)))
                     .ToList();
-                if (!PedirMapaCentros(porCentro.Select(x => x.Key))) return;
-                // Uma janela por centro (por vez): conferência e seleção dos funcionários.
-                var selecionados = new List<(int Centro, string NomeEmpregado, int Empregado, decimal Liquido, string G, string H, string I, string J)>();
-                foreach (var gc in porCentro)
+                if (agrupados.Count == 0)
                 {
-                    var funcs = gc.ToArray();
-                    var nomeCentro = svc.NomeCentroCusto(_conn!, gc.Key);
-                    var gradeC = MontarGradeApropriacao(funcs.Select((x, i) =>
-                        (Indice: i, Desc: $"{x.Empregado} - {x.NomeEmpregado}", x.Centro, x.Liquido)));
-                    var selC = ExibirGradeApropriacao(gradeC,
-                        $"Apropriação - {cmbFolhaTipo.SelectedItem} - {gc.Key:D4} - {nomeCentro}");
-                    if (selC == null) return;
-                    foreach (var r in selC)
-                    {
-                        var f = funcs[r.Indice];
-                        selecionados.Add((gc.Key, f.NomeEmpregado, f.Empregado, f.Liquido, r.G, r.H, r.I, r.J));
-                    }
+                    MessageBox.Show("Nenhum valor no período.", "Aviso",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
                 }
-
-                // Agrega os selecionados por centro (Empregados = funcionários marcados).
                 var linhasCompletas = new List<(int Centro, string Nome, int Empregados, decimal Total, string CredorCodigo, string CredorNome)>();
-                var ap = new List<(string G, string H, string I, string J)>();
-                foreach (var gc in selecionados.GroupBy(x => x.Centro).OrderBy(x => x.Key))
-                {
-                    var prim = gc.First();
-                    linhasCompletas.Add((gc.Key, svc.NomeCentroCusto(_conn!, gc.Key), gc.Count(), gc.Sum(x => x.Liquido), credorCod, credorNome));
-                    ap.Add((prim.G, prim.H, prim.I, prim.J));
-                }
+                foreach (var g in agrupados)
+                    linhasCompletas.Add((g.Centro, svc.NomeCentroCusto(_conn!, g.Centro), g.Empregados, g.Total, credorCod, credorNome));
                 if (linhasCompletas.Count == 0)
                 {
                     MessageBox.Show("Nenhum valor nesta competência.", "Aviso",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                _csvGeradoFolha = DbService.GerarCsv(linhasCompletas,
-                    venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap, descRef: descRef, compRef: compSufixo, extra: extraObs);
+                if (!PedirMapaCentros(linhasCompletas.Select(x => x.Centro))) return;
+                // Períodos de gozo por centro (férias), calculados sobre todas as linhas.
+                Dictionary<int, (DateTime Ini, DateTime Fim, int Dias)>? perCentro = null;
+                if (tipo == 2 && feriasBase != null)
+                {
+                    var lookupFer = feriasBase.ToLookup(x => (x.Empregado, x.Centro, x.Valor));
+                    perCentro = analiticas
+                        .Select(a => lookupFer[(a.Empregado, a.Centro, a.Valor)].FirstOrDefault())
+                        .GroupBy(x => x.Centro)
+                        .ToDictionary(g => g.Key, g => (Ini: g.Min(x => x.IniGozo), Fim: g.Max(x => x.FimGozo), Dias: g.Sum(x => x.Dias)));
+                }
+                // Grade única: seleção + G/H/I/J por centro (pré-preenchidos).
+                var grade = MontarGradeApropriacao(linhasCompletas.Select((x, i) =>
+                    (Indice: i, Desc: $"{x.Centro:D4} - {x.Nome}", x.Centro, x.Total)));
+                var sel = ExibirGradeApropriacao(grade, $"Apropriação - {cmbFolhaTipo.SelectedItem}");
+                if (sel == null) return;
+                var ap = sel.Select(r => (G: r.G, H: r.H, I: r.I, J: r.J)).ToList();
+                var sub = sel.Select(r => linhasCompletas[r.Indice]).ToList();
+                if (tipo == 2 && perCentro != null)
+                {
+                    _csvGeradoFolha = DbService.GerarCsvFerias(
+                        sub.Select(l => {
+                            perCentro.TryGetValue(l.Centro, out var p);
+                            return (l.Centro, l.Nome, l.Total, p.Ini, p.Fim, p.Dias);
+                        }).ToList(),
+                        venc, verba, credorCod, credorNome, doc, obra, unidade, itemOrc, departamento, chkDocSeq.Checked, ap,
+                        compRef: compSufixo, extra: extraObs);
+                }
+                else
+                    _csvGeradoFolha = DbService.GerarCsv(
+                        sub.Select(l => (l.Centro, l.Nome, l.Empregados, l.Total, credorCod, credorNome)).ToList(),
+                        venc, verba, doc, credorNome, obra, unidade, itemOrc, departamento, sufixoObs, chkDocSeq.Checked, ap, descRef: descRef, compRef: compSufixo, extra: extraObs);
+                linhasCompletas = sub;
                 decimal total = linhasCompletas.Sum(x => x.Total);
                 lblTotalFolha.Text = $"Total: R$ {total.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))}";
 
@@ -1794,7 +1816,7 @@ public partial class Form1 : Form
                         analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoPorClasse(_conn, comp, 14), x => x.Centro, centrosFiltro);
                         break;
                     case "ECONSIGNADO":
-                        analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoEmprestimos(_conn, comp, 49, 50), x => x.Centro, centrosFiltro);
+                        analiticoLinhas = FiltrarPorCentro(svc.GuiaAnaliticoEmprestimos(_conn, 49, comp), x => x.Centro, centrosFiltro);
                         break;
                     case "GRRF":
                         analiticoLinhas = FiltrarPorCentro(
@@ -1875,7 +1897,7 @@ public partial class Form1 : Form
                         "INSS" => svc.GuiaAnaliticoPorClasse(_conn, comp, 12),
                         "IRRF" => svc.GuiaIrrfAnalitico(_conn, comp),
                         "FGTS" => svc.GuiaAnaliticoPorClasse(_conn, comp, 14),
-                        _ => svc.GuiaAnaliticoEmprestimos(_conn, comp, 49, 50),
+                        _ => svc.GuiaAnaliticoEmprestimos(_conn, 49, comp),
                     };
                     var agrupado = analiticoTodos
                         .Where(l => centrosFiltro.Count == 0 || centrosFiltro.Contains(l.Centro))
