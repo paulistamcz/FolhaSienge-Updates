@@ -1129,25 +1129,25 @@ public class DbService
     /// (COMPOE_LIQUIDO=1; exclui os eventos virtuais 51/8517 e as linhas
     /// informativas como DEPENDENTE IRRF e FGTS).
     private const string LiquidoRescisaoSql =
-        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1) - " +
-        "(SELECT SUM(m.valor_cal) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos AND m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517))";
+        "(SELECT ISNULL(SUM(m.valor_cal), 0) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = r.codi_emp AND m.i_calculos = r.i_calculos AND m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1) - " +
+        "(SELECT ISNULL(SUM(m.valor_cal), 0) FROM bethadba.fomovto m JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos WHERE m.codi_emp = r.codi_emp AND m.i_calculos = r.i_calculos AND m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517))";
 
     /// Rescisões por empregado num período (analítico) - base = líquido (fomovto P − D).
-    /// O período usa a data registrada na rescisão (forescisoes.demissao, a data
-    /// inserida na rescisão); sem registro de rescisão, cai para o vencimento da GRFC.
-    /// Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa.
+    /// Dirigido por forescisoes, incluindo rescisões SEM guia GRFC (ex.: pedido de
+    /// demissão sem multa, sem FGTS a recolher). O período usa a data da rescisão
+    /// (forescisoes.demissao, com fallback para a data de pagamento); o centro vem
+    /// de foempregados. Retorna (Centro, NomeEmpregado, Empregado, Valor) por pessoa.
     /// </summary>
     public List<(int Centro, string NomeEmpregado, int Empregado, decimal Valor)>
         ListarRescisaoAnalitica(OdbcConnection conn, DateTime ini, DateTime fim)
     {
         var lista = new List<(int, string, int, decimal)>();
         using var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, TRIM(e.nome), g.i_empregados, " +
+            "SELECT e.i_ccustos, TRIM(e.nome), r.i_empregados, " +
             "ROUND(" + LiquidoRescisaoSql + ", 2) " +
-            "FROM bethadba.foguiagrfc g " +
-            "LEFT JOIN bethadba.forescisoes r ON r.codi_emp = g.codi_emp AND r.i_calculos = g.i_calculos " +
-            "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
-            "WHERE g.codi_emp = " + DbService.Empresa + " AND ISNULL(r.demissao, g.vencimento) >= ? AND ISNULL(r.demissao, g.vencimento) <= ? " +
+            "FROM bethadba.forescisoes r " +
+            "LEFT JOIN bethadba.foempregados e ON r.codi_emp = e.codi_emp AND r.i_empregados = e.i_empregados " +
+            "WHERE r.codi_emp = " + DbService.Empresa + " AND ISNULL(r.demissao, r.data_pagto) >= ? AND ISNULL(r.demissao, r.data_pagto) <= ? " +
             "AND (" + LiquidoRescisaoSql + ") > 0 " +
             "ORDER BY e.i_ccustos, e.nome", conn);
         cmd.Parameters.AddWithValue("ini", ini);
@@ -1166,8 +1166,8 @@ public class DbService
 
     /// <summary>
     /// Rescisões por centro (completo) num período - base = líquido (fomovto P − D).
-    /// O período usa a data registrada na rescisão (forescisoes.demissao); sem
-    /// registro, cai para o vencimento da GRFC (mesmo critério do analítico).
+    /// Dirigido por forescisoes, incluindo rescisões SEM guia GRFC (mesmo critério
+    /// do analítico); período = data da rescisão (demissao, fallback data de pagamento).
     /// Retorna (Centro, Nome, Empregados, Total).
     /// </summary>
     public List<(int Centro, string Nome, int Empregados, decimal Total)>
@@ -1175,16 +1175,15 @@ public class DbService
     {
         var lista = new List<(int, string, int, decimal)>();
         using var cmd = new OdbcCommand(
-            "SELECT e.i_ccustos, c.nome, COUNT(DISTINCT g.i_empregados), " +
+            "SELECT e.i_ccustos, c.nome, COUNT(DISTINCT r.i_empregados), " +
             "ROUND(SUM(CASE WHEN m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1 THEN m.valor_cal ELSE 0 END) - " +
             "SUM(CASE WHEN m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END), 2) " +
-            "FROM bethadba.foguiagrfc g " +
-            "LEFT JOIN bethadba.forescisoes r ON r.codi_emp = g.codi_emp AND r.i_calculos = g.i_calculos " +
-            "JOIN bethadba.fomovto m ON m.codi_emp = g.codi_emp AND m.i_calculos = g.i_calculos " +
+            "FROM bethadba.forescisoes r " +
+            "JOIN bethadba.fomovto m ON m.codi_emp = r.codi_emp AND m.i_calculos = r.i_calculos " +
             "JOIN bethadba.foeventos ev ON m.codi_emp = ev.codi_emp AND m.i_eventos = ev.i_eventos " +
-            "LEFT JOIN bethadba.foempregados e ON g.codi_emp = e.codi_emp AND g.i_empregados = e.i_empregados " +
+            "LEFT JOIN bethadba.foempregados e ON r.codi_emp = e.codi_emp AND r.i_empregados = e.i_empregados " +
             "LEFT JOIN bethadba.foccustos c ON e.codi_emp = c.codi_emp AND e.i_ccustos = c.i_ccustos " +
-            "WHERE g.codi_emp = " + DbService.Empresa + " AND ISNULL(r.demissao, g.vencimento) >= ? AND ISNULL(r.demissao, g.vencimento) <= ? " +
+            "WHERE r.codi_emp = " + DbService.Empresa + " AND ISNULL(r.demissao, r.data_pagto) >= ? AND ISNULL(r.demissao, r.data_pagto) <= ? " +
             "GROUP BY e.i_ccustos, c.nome " +
             "HAVING (SUM(CASE WHEN m.prov_desc = 'P' AND ev.COMPOE_LIQUIDO = 1 THEN m.valor_cal ELSE 0 END) - " +
             "SUM(CASE WHEN m.prov_desc = 'D' AND ev.COMPOE_LIQUIDO = 1 AND m.i_eventos NOT IN (51, 8517) THEN m.valor_cal ELSE 0 END)) > 0 " +
